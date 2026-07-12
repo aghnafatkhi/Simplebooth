@@ -28,10 +28,13 @@ import {
   Calendar,
   Clock,
   MapPin,
-  Heart
+  Heart,
+  Upload
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
+// @ts-ignore
+import gifshot from "gifshot";
 import {
   POSE_CHALLENGES,
   FILTER_PRESETS,
@@ -70,6 +73,7 @@ interface EditState {
   innerBorder: boolean;
   outerBorder: boolean;
   layout: string;
+  frameImage?: string;
   sliders: {
     brightness: number;
     contrast: number;
@@ -152,6 +156,7 @@ const DEFAULT_EDIT_STATE: EditState = {
   innerBorder: true,
   outerBorder: true,
   layout: "4-vertical",
+  frameImage: "",
   sliders: {
     brightness: 100,
     contrast: 100,
@@ -266,8 +271,8 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
 
   // Editor states
   const [editState, setEditState] = useState<EditState>(DEFAULT_EDIT_STATE);
-  const [activeTab, setActiveTab] = useState<"frame" | "filter" | "stickers" | "text" | "poses" | "download">("frame");
-  const [selectedStickerCategory, setSelectedStickerCategory] = useState<string>("Smile");
+  const [activeTab, setActiveTab] = useState<"frame" | "filter" | "stickers" | "text" | "download">("frame");
+  const [selectedStickerCategory, setSelectedStickerCategory] = useState<string>("Cute 3D");
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [selectedElementType, setSelectedElementType] = useState<"sticker" | "text" | null>(null);
 
@@ -286,6 +291,21 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
   const [isVideoGenerating, setIsVideoGenerating] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
   const [videoPhase, setVideoPhase] = useState("");
+
+  // GIF generation states
+  const [isGifGenerating, setIsGifGenerating] = useState(false);
+  const [gifProgress, setGifProgress] = useState(0);
+
+  // Live Photo recorded clip states & refs
+  const [recordedClipsP1, setRecordedClipsP1] = useState<string[]>([]);
+  const [recordedClipsP2, setRecordedClipsP2] = useState<string[]>([]);
+  const [hoveredPhotoIdx, setHoveredPhotoIdx] = useState<number | null>(null);
+
+  const countdownRecorderP1Ref = useRef<MediaRecorder | null>(null);
+  const countdownChunksP1Ref = useRef<Blob[]>([]);
+
+  const countdownRecorderP2Ref = useRef<MediaRecorder | null>(null);
+  const countdownChunksP2Ref = useRef<Blob[]>([]);
 
   // Local synchronized countdown
   const [countdownVal, setCountdownVal] = useState<number | null>(null);
@@ -586,11 +606,119 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
     updateMyPeerStatusInFirebase("taking_photo");
   }, [room?.status, currentPhotoCount]);
 
+  const startCountdownRecording = () => {
+    if (typeof MediaRecorder === "undefined") return;
+
+    // Record local stream
+    if (localStream) {
+      try {
+        countdownChunksP1Ref.current = [];
+        let options = { mimeType: "video/webm;codecs=vp9" };
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options = { mimeType: "video/webm" };
+        }
+        const rec = new MediaRecorder(localStream, options);
+        rec.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            countdownChunksP1Ref.current.push(e.data);
+          }
+        };
+        rec.onstop = () => {
+          if (countdownChunksP1Ref.current.length > 0) {
+            const blob = new Blob(countdownChunksP1Ref.current, { type: options.mimeType });
+            const url = URL.createObjectURL(blob);
+            if (isPeer1) {
+              setRecordedClipsP1((prev) => {
+                const next = [...prev];
+                next[currentPhotoCount] = url;
+                return next;
+              });
+            } else {
+              setRecordedClipsP2((prev) => {
+                const next = [...prev];
+                next[currentPhotoCount] = url;
+                return next;
+              });
+            }
+          }
+        };
+        countdownRecorderP1Ref.current = rec;
+        rec.start();
+      } catch (err) {
+        console.error("Gagal merekam localStream:", err);
+      }
+    }
+
+    // Record remote stream
+    const remoteStream = remoteVideoRef.current?.srcObject as MediaStream | null;
+    if (remoteStream && room?.boothMode !== "solo") {
+      try {
+        countdownChunksP2Ref.current = [];
+        let options = { mimeType: "video/webm;codecs=vp9" };
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          options = { mimeType: "video/webm" };
+        }
+        const rec = new MediaRecorder(remoteStream, options);
+        rec.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            countdownChunksP2Ref.current.push(e.data);
+          }
+        };
+        rec.onstop = () => {
+          if (countdownChunksP2Ref.current.length > 0) {
+            const blob = new Blob(countdownChunksP2Ref.current, { type: options.mimeType });
+            const url = URL.createObjectURL(blob);
+            if (isPeer1) {
+              setRecordedClipsP2((prev) => {
+                const next = [...prev];
+                next[currentPhotoCount] = url;
+                return next;
+              });
+            } else {
+              setRecordedClipsP1((prev) => {
+                const next = [...prev];
+                next[currentPhotoCount] = url;
+                return next;
+              });
+            }
+          }
+        };
+        countdownRecorderP2Ref.current = rec;
+        rec.start();
+      } catch (err) {
+        console.error("Gagal merekam remoteStream:", err);
+      }
+    }
+  };
+
+  const stopCountdownRecording = () => {
+    if (countdownRecorderP1Ref.current && countdownRecorderP1Ref.current.state !== "inactive") {
+      try {
+        countdownRecorderP1Ref.current.stop();
+      } catch (e) {
+        console.error("Gagal menghentikan perekaman localStream:", e);
+      }
+    }
+    if (countdownRecorderP2Ref.current && countdownRecorderP2Ref.current.state !== "inactive") {
+      try {
+        countdownRecorderP2Ref.current.stop();
+      } catch (e) {
+        console.error("Gagal menghentikan perekaman remoteStream:", e);
+      }
+    }
+  };
+
   // Local tick down timer
   useEffect(() => {
     if (countdownVal === null) return;
 
+    // Start recording at 3 seconds remaining
+    if (countdownVal === 3) {
+      startCountdownRecording();
+    }
+
     if (countdownVal === 0) {
+      stopCountdownRecording();
       setCountdownVal(null);
       capturePhoto();
       return;
@@ -687,6 +815,9 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
   const startPhotobooth = async () => {
     if (!room) return;
     const roomRef = doc(db, "rooms", roomId);
+
+    setRecordedClipsP1([]);
+    setRecordedClipsP2([]);
 
     await updateDoc(roomRef, {
       status: "countdown",
@@ -948,7 +1079,11 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
     }, 3000);
 
     setTimeout(async () => {
-      await compileAndSaveStrip(resolutionId);
+      if (resolutionId === "printable-4r") {
+        await compileAndSave4RSheet();
+      } else {
+        await compileAndSaveStrip(resolutionId);
+      }
       setPrintProgress(100);
       setPrintPhase("Selesai Cetak!");
       setTimeout(() => {
@@ -957,8 +1092,8 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
     }, 4200);
   };
 
-  const compileAndSaveStrip = async (resolutionId: string) => {
-    if (!room) return;
+  const generateSingleStripCanvas = async (scale: number): Promise<HTMLCanvasElement | null> => {
+    if (!room) return null;
 
     try {
       const loadImage = (src: string): Promise<HTMLImageElement> => {
@@ -971,16 +1106,12 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
         });
       };
 
-      const selectedRes = DOWNLOAD_RATIOS.find(r => r.id === resolutionId) || DOWNLOAD_RATIOS[0];
-      const scale = selectedRes.scale;
-
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      if (!ctx) return null;
 
       const photosP1 = room.photos1 || [];
       const photosP2 = room.photos2 || [];
-      const isDual = photosP2.length > 0;
 
       // Define standard layout sizes
       let photoWidth = 320 * scale;
@@ -1028,22 +1159,37 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
       const activeFrameConfig = allFrameStyles.find(f => f.id === editState.frame) || allFrameStyles[0] || FRAME_STYLES[0];
 
       // 1. Draw Background Type
-      if (activeFrameConfig?.frameBackgroundImageUrl) {
+      if (editState.frameImage) {
+        try {
+          const bgImg = await loadImage(editState.frameImage);
+          ctx.drawImage(bgImg, 0, 0, stripWidth, stripHeight);
+        } catch(e) {
+          ctx.fillStyle = editState.backgroundColor;
+          ctx.fillRect(0, 0, stripWidth, stripHeight);
+        }
+      } else if (activeFrameConfig?.frameBackgroundImageUrl) {
         try {
           const bgImg = await loadImage(activeFrameConfig.frameBackgroundImageUrl);
           ctx.drawImage(bgImg, 0, 0, stripWidth, stripHeight);
         } catch(e) {
-          ctx.fillStyle = activeFrameConfig.bgColor || "#ffffff";
+          ctx.fillStyle = editState.backgroundColor || "#ffffff";
           ctx.fillRect(0, 0, stripWidth, stripHeight);
         }
       } else if (editState.backgroundType === "warna-polos") {
-        ctx.fillStyle = activeFrameConfig?.bgColor || editState.backgroundColor;
+        ctx.fillStyle = editState.backgroundColor;
         ctx.fillRect(0, 0, stripWidth, stripHeight);
       } else if (editState.backgroundType === "gradient-lembut") {
         const grd = ctx.createLinearGradient(0, 0, stripWidth, stripHeight);
-        // Parse gradient colors or use preset
-        grd.addColorStop(0, "#fecdd3");
-        grd.addColorStop(1, "#ffedd5");
+        let col1 = "#fecdd3", col2 = "#ffedd5";
+        if (editState.backgroundGradient) {
+          const matches = editState.backgroundGradient.match(/#[0-9a-fA-F]{6}/g);
+          if (matches && matches.length >= 2) {
+            col1 = matches[0];
+            col2 = matches[1];
+          }
+        }
+        grd.addColorStop(0, col1);
+        grd.addColorStop(1, col2);
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, stripWidth, stripHeight);
       } else {
@@ -1156,7 +1302,6 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
               offscreen.height = photoHeight;
               const oCtx = offscreen.getContext("2d");
               if (oCtx) {
-                // Construct modern context filter string
                 const filterPreset = FILTER_PRESETS.find(f => f.id === editState.filter)?.css || "";
                 const sliderBrightness = editState.sliders.brightness;
                 const sliderContrast = editState.sliders.contrast;
@@ -1227,11 +1372,23 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
         ctx.rotate((sticker.rotation * Math.PI) / 180);
         ctx.scale(sticker.scale * scale, sticker.scale * scale);
 
-        // Render emoji
-        ctx.font = `${28}px Arial, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(sticker.char, 0, 0);
+        if (sticker.char.startsWith("http") || sticker.char.startsWith("/") || sticker.char.includes(".")) {
+          try {
+            const img = await loadImage(sticker.char);
+            if (img) {
+              // Center the image (size: 48x48 scaled by scale factor)
+              ctx.drawImage(img, -24, -24, 48, 48);
+            }
+          } catch (e) {
+            console.error("Gagal menggambar sticker image:", e);
+          }
+        } else {
+          // Render emoji
+          ctx.font = `${28}px Arial, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(sticker.char, 0, 0);
+        }
         ctx.restore();
       }
 
@@ -1254,6 +1411,21 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
         ctx.restore();
       }
 
+      return canvas;
+    } catch (e) {
+      console.error("Gagal membuat single strip canvas:", e);
+      return null;
+    }
+  };
+
+  const compileAndSaveStrip = async (resolutionId: string) => {
+    if (!room) return;
+
+    try {
+      const selectedRes = DOWNLOAD_RATIOS.find(r => r.id === resolutionId) || DOWNLOAD_RATIOS[0];
+      const canvas = await generateSingleStripCanvas(selectedRes.scale);
+      if (!canvas) throw new Error("Gagal merender strip");
+
       // Download trigger
       const dataUrl = canvas.toDataURL(selectedRes.format === "jpeg" ? "image/jpeg" : "image/png");
       const link = document.createElement("a");
@@ -1262,6 +1434,69 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
       link.click();
     } catch (err) {
       console.error("Download Error:", err);
+    }
+  };
+
+  const compileAndSave4RSheet = async () => {
+    if (!room) return;
+
+    try {
+      // Use standard print-quality scale (2.0)
+      const stripCanvas = await generateSingleStripCanvas(2.0);
+      if (!stripCanvas) throw new Error("Gagal membuat strip dasar untuk cetak 4R");
+
+      const sW = stripCanvas.width;
+      const sH = stripCanvas.height;
+
+      // Create a 4R sheet canvas (holds 2 strips side-by-side with nice margins and central dashed line)
+      const canvas4R = document.createElement("canvas");
+      const gap = 40;
+      const marginX = 30;
+      const marginY = 40;
+
+      canvas4R.width = sW * 2 + gap + marginX * 2;
+      canvas4R.height = sH + marginY * 2;
+
+      const ctx = canvas4R.getContext("2d");
+      if (!ctx) return;
+
+      // 1. Draw solid clean background for the entire printing template
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas4R.width, canvas4R.height);
+
+      // 2. Draw left strip
+      ctx.drawImage(stripCanvas, marginX, marginY);
+
+      // 3. Draw right strip
+      ctx.drawImage(stripCanvas, marginX + sW + gap, marginY);
+
+      // 4. Draw a beautifully subtle cutting guideline in the middle
+      const centerX = marginX + sW + gap / 2;
+      ctx.strokeStyle = "#cbd5e1"; // Slate 300
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(centerX, marginY / 2);
+      ctx.lineTo(centerX, canvas4R.height - marginY / 2);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset line dash
+
+      // 5. Draw clear text instructions at the top and bottom with scissor emojis
+      ctx.fillStyle = "#94a3b8"; // Slate 400
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("✂️ POTONG DI SINI (CUT HERE) ✂️", centerX, marginY / 2);
+      ctx.fillText("✂️ POTONG DI SINI (CUT HERE) ✂️", centerX, canvas4R.height - marginY / 2);
+
+      // 6. Download the high resolution printable sheet
+      const dataUrl = canvas4R.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = `DualBooth-Cetak-4R-${room.roomId}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("Gagal mengompilasi lembaran cetak 4R:", err);
     }
   };
 
@@ -1372,26 +1607,47 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
 
       const activeFrameConfig = allFrameStyles.find(f => f.id === editState.frame) || allFrameStyles[0] || FRAME_STYLES[0];
 
-      if (activeFrameConfig?.frameBackgroundImageUrl) {
+      if (editState.frameImage) {
+        try {
+          const bgImg = await loadImageHelper(editState.frameImage);
+          if (bgImg) {
+            ctx.drawImage(bgImg, 0, 0, stripWidth, stripHeight);
+          } else {
+            ctx.fillStyle = editState.backgroundColor;
+            ctx.fillRect(0, 0, stripWidth, stripHeight);
+          }
+        } catch(e) {
+          ctx.fillStyle = editState.backgroundColor;
+          ctx.fillRect(0, 0, stripWidth, stripHeight);
+        }
+      } else if (activeFrameConfig?.frameBackgroundImageUrl) {
         try {
           const bgImg = await loadImageHelper(activeFrameConfig.frameBackgroundImageUrl);
           if (bgImg) {
             ctx.drawImage(bgImg, 0, 0, stripWidth, stripHeight);
           } else {
-            ctx.fillStyle = activeFrameConfig.bgColor || "#ffffff";
+            ctx.fillStyle = editState.backgroundColor || "#ffffff";
             ctx.fillRect(0, 0, stripWidth, stripHeight);
           }
         } catch(e) {
-          ctx.fillStyle = activeFrameConfig.bgColor || "#ffffff";
+          ctx.fillStyle = editState.backgroundColor || "#ffffff";
           ctx.fillRect(0, 0, stripWidth, stripHeight);
         }
       } else if (editState.backgroundType === "warna-polos") {
-        ctx.fillStyle = activeFrameConfig?.bgColor || editState.backgroundColor;
+        ctx.fillStyle = editState.backgroundColor;
         ctx.fillRect(0, 0, stripWidth, stripHeight);
       } else if (editState.backgroundType === "gradient-lembut") {
         const grd = ctx.createLinearGradient(0, 0, stripWidth, stripHeight);
-        grd.addColorStop(0, "#fecdd3");
-        grd.addColorStop(1, "#ffedd5");
+        let col1 = "#fecdd3", col2 = "#ffedd5";
+        if (editState.backgroundGradient) {
+          const matches = editState.backgroundGradient.match(/#[0-9a-fA-F]{6}/g);
+          if (matches && matches.length >= 2) {
+            col1 = matches[0];
+            col2 = matches[1];
+          }
+        }
+        grd.addColorStop(0, col1);
+        grd.addColorStop(1, col2);
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, stripWidth, stripHeight);
       } else {
@@ -1667,10 +1923,21 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
         ctx.rotate((sticker.rotation * Math.PI) / 180);
         ctx.scale(sticker.scale * scale, sticker.scale * scale);
 
-        ctx.font = `${28}px Arial, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(sticker.char, 0, 0);
+        if (sticker.char.startsWith("http") || sticker.char.startsWith("/") || sticker.char.includes(".")) {
+          try {
+            const img = await loadImageHelper(sticker.char);
+            if (img) {
+              ctx.drawImage(img, -24, -24, 48, 48);
+            }
+          } catch (e) {
+            console.error("Gagal menggambar sticker image:", e);
+          }
+        } else {
+          ctx.font = `${28}px Arial, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(sticker.char, 0, 0);
+        }
         ctx.restore();
       }
 
@@ -1696,6 +1963,158 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
     } catch (err) {
       console.error("renderStripToCanvas error:", err);
       return null;
+    }
+  };
+
+  const compileAndSaveGif = async () => {
+    if (!room) return;
+
+    try {
+      setIsGifGenerating(true);
+      setGifProgress(10);
+
+      const photosP1 = room.photos1 || [];
+      const photosP2 = room.photos2 || [];
+      const activeFrameConfig = allFrameStyles.find(f => f.id === editState.frame) || allFrameStyles[0] || FRAME_STYLES[0];
+      const totalPhotosLimit = activeFrameConfig?.slots?.length || 4;
+
+      const activePhotosCount = Math.max(photosP1.length, photosP2.length);
+      if (activePhotosCount === 0) {
+        throw new Error("Belum ada foto yang diambil");
+      }
+
+      const loadImageHelper = (src: string): Promise<HTMLImageElement | null> => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(null);
+          img.src = src;
+        });
+      };
+
+      const framesDataUrls: string[] = [];
+      const filterPreset = FILTER_PRESETS.find(f => f.id === editState.filter)?.css || "";
+      const { brightness, contrast, saturation, blur } = editState.sliders;
+
+      setGifProgress(30);
+
+      for (let i = 0; i < totalPhotosLimit; i++) {
+        const p1Url = photosP1[i] || null;
+        const p2Url = photosP2[i] || null;
+
+        if (!p1Url && !p2Url) continue;
+
+        // Create canvas for this GIF frame (1:1 aspect ratio)
+        const frameCanvas = document.createElement("canvas");
+        frameCanvas.width = 600;
+        frameCanvas.height = 600;
+        const fCtx = frameCanvas.getContext("2d");
+        if (!fCtx) continue;
+
+        // Draw background
+        fCtx.fillStyle = activeFrameConfig.bgColor || editState.backgroundColor || "#ffffff";
+        fCtx.fillRect(0, 0, 600, 600);
+
+        // Set filters
+        fCtx.filter = `${filterPreset} brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) blur(${blur}px)`;
+
+        const isOnlineDual = room.boothMode !== "solo" && photosP2.length > 0;
+
+        if (isOnlineDual) {
+          // Left half - Peer 1
+          if (p1Url) {
+            const img1 = await loadImageHelper(p1Url);
+            if (img1) {
+              const halfWidth = 300;
+              const imgRatio = img1.width / img1.height;
+              const targetRatio = halfWidth / 600;
+              let sx = 0, sy = 0, sWidth = img1.width, sHeight = img1.height;
+              if (imgRatio > targetRatio) {
+                sWidth = img1.height * targetRatio;
+                sx = (img1.width - sWidth) / 2;
+              } else {
+                sHeight = img1.width / targetRatio;
+                sy = (img1.height - sHeight) / 2;
+              }
+              fCtx.drawImage(img1, sx, sy, sWidth, sHeight, 0, 0, halfWidth, 600);
+            }
+          }
+          // Right half - Peer 2
+          if (p2Url) {
+            const img2 = await loadImageHelper(p2Url);
+            if (img2) {
+              const halfWidth = 300;
+              const imgRatio = img2.width / img2.height;
+              const targetRatio = halfWidth / 600;
+              let sx = 0, sy = 0, sWidth = img2.width, sHeight = img2.height;
+              if (imgRatio > targetRatio) {
+                sWidth = img2.height * targetRatio;
+                sx = (img2.width - sWidth) / 2;
+              } else {
+                sHeight = img2.width / targetRatio;
+                sy = (img2.height - sHeight) / 2;
+              }
+              fCtx.drawImage(img2, sx, sy, sWidth, sHeight, 300, 0, halfWidth, 600);
+            }
+          }
+        } else {
+          // Solo full frame
+          const pUrl = p1Url || p2Url;
+          if (pUrl) {
+            const img = await loadImageHelper(pUrl);
+            if (img) {
+              const imgRatio = img.width / img.height;
+              const targetRatio = 1; // 600 / 600
+              let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height;
+              if (imgRatio > targetRatio) {
+                sWidth = img.height * targetRatio;
+                sx = (img.width - sWidth) / 2;
+              } else {
+                sHeight = img.width / targetRatio;
+                sy = (img.height - sHeight) / 2;
+              }
+              fCtx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, 600, 600);
+            }
+          }
+        }
+
+        framesDataUrls.push(frameCanvas.toDataURL("image/jpeg", 0.8));
+      }
+
+      setGifProgress(60);
+
+      if (framesDataUrls.length === 0) {
+        throw new Error("Gagal mengambil data frame foto");
+      }
+
+      gifshot.createGIF({
+        images: framesDataUrls,
+        interval: 0.6,
+        gifWidth: 600,
+        gifHeight: 600,
+        numWorkers: 2,
+      }, (obj: any) => {
+        if (!obj.error) {
+          const gifUrl = obj.image;
+          const link = document.createElement("a");
+          link.download = `DualBooth-Studio-${room.roomId}-animasi.gif`;
+          link.href = gifUrl;
+          link.click();
+
+          setGifProgress(100);
+          setTimeout(() => {
+            setIsGifGenerating(false);
+          }, 1000);
+        } else {
+          console.error("Gifshot error:", obj.error);
+          setIsGifGenerating(false);
+        }
+      });
+
+    } catch (err) {
+      console.error("GIF compilation error:", err);
+      setIsGifGenerating(false);
     }
   };
 
@@ -1742,9 +2161,37 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
         loadedImages.push(loaded);
       }
 
+      // Preload recorded live video elements
+      const videoElementsP1: Record<number, HTMLVideoElement> = {};
+      const videoElementsP2: Record<number, HTMLVideoElement> = {};
+
+      for (let i = 0; i < totalPhotosLimit; i++) {
+        const p1Url = recordedClipsP1[i];
+        if (p1Url) {
+          const v = document.createElement("video");
+          v.src = p1Url;
+          v.muted = true;
+          v.playsInline = true;
+          v.crossOrigin = "anonymous";
+          v.load();
+          videoElementsP1[i] = v;
+        }
+
+        const p2Url = recordedClipsP2[i];
+        if (p2Url) {
+          const v = document.createElement("video");
+          v.src = p2Url;
+          v.muted = true;
+          v.playsInline = true;
+          v.crossOrigin = "anonymous";
+          v.load();
+          videoElementsP2[i] = v;
+        }
+      }
+
       const videoCanvas = document.createElement("canvas");
-      videoCanvas.width = 720;
-      videoCanvas.height = 1280;
+      videoCanvas.width = 640;
+      videoCanvas.height = 480;
       const ctx = videoCanvas.getContext("2d");
       if (!ctx) throw new Error("Canvas 2D context not supported");
 
@@ -1786,7 +2233,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
         const blob = new Blob(chunks, { type: options.mimeType });
         const videoUrl = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.download = `DualBooth-Studio-${room.roomId}-video.mp4`;
+        link.download = `DualBooth-LivePhoto-${room.roomId}.mp4`;
         link.href = videoUrl;
         link.click();
         
@@ -1796,230 +2243,91 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
 
       mediaRecorder.start();
 
-      const confettiColors = ["#f43f5e", "#ec4899", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b"];
-      const particles = Array.from({ length: 60 }, () => ({
-        x: Math.random() * 720,
-        y: Math.random() * -400,
-        size: Math.random() * 10 + 5,
-        color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
-        speedY: Math.random() * 4 + 3,
-        speedX: Math.random() * 4 - 2,
-        rotation: Math.random() * 360,
-        rotationSpeed: Math.random() * 6 - 3
-      }));
-
       let currentFrame = 0;
-      const capturePhaseFrames = totalPhotosLimit * 75;
-      const finalPhaseStartFrame = 45 + capturePhaseFrames;
-      const totalFrames = finalPhaseStartFrame + 75;
+      const framesPerPhoto = 90; // 3 seconds
+      const totalFrames = totalPhotosLimit * framesPerPhoto;
 
-      const renderLoop = setInterval(() => {
+      const executeFrame = async () => {
         if (currentFrame >= totalFrames) {
-          clearInterval(renderLoop);
           mediaRecorder.stop();
           return;
         }
 
-        const grad = ctx.createLinearGradient(0, 0, 720, 1280);
-        grad.addColorStop(0, "#0f172a");
-        grad.addColorStop(1, "#1e1b4b");
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 720, 1280);
+        const photoIndex = Math.floor(currentFrame / framesPerPhoto);
+        const localIndex = currentFrame % framesPerPhoto;
 
-        ctx.fillStyle = "rgba(255, 255, 255, 0.015)";
-        for (let i = 0; i < 720; i += 30) {
-          ctx.fillRect(i, 0, 1, 1280);
+        const vidP1 = videoElementsP1[photoIndex];
+        const vidP2 = videoElementsP2[photoIndex];
+
+        const timeToSeek = localIndex / 30;
+        if (vidP1) {
+          try {
+            vidP1.currentTime = timeToSeek;
+          } catch (e) {}
         }
-        for (let j = 0; j < 1280; j += 30) {
-          ctx.fillRect(0, j, 720, 1);
+        if (vidP2) {
+          try {
+            vidP2.currentTime = timeToSeek;
+          } catch (e) {}
         }
 
-        if (currentFrame < 45) {
-          ctx.textAlign = "center";
-          
-          const showRec = Math.floor(currentFrame / 10) % 2 === 0;
-          if (showRec) {
-            ctx.fillStyle = "#ef4444";
-            ctx.beginPath();
-            ctx.arc(60, 80, 10, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 20px monospace";
-          ctx.fillText("REC", 100, 88);
+        // Await a brief frame delay for HTML5 video elements to sync
+        await new Promise(resolve => setTimeout(resolve, 15));
 
-          drawRetroViewfinderBrackets(ctx);
+        // Clear canvas
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, 640, 480);
 
-          ctx.fillStyle = "#f43f5e";
-          ctx.font = "bold 38px sans-serif";
-          ctx.fillText("DUALBOOTH STUDIO", 360, 580);
-          ctx.fillStyle = "#e2e8f0";
-          ctx.font = "22px monospace";
-          ctx.fillText("MENYIAPKAN ROL KAMERA...", 360, 640);
+        const isOnlineDual = room.boothMode !== "solo" && (vidP1 || vidP2);
 
-        } else if (currentFrame >= 45 && currentFrame < finalPhaseStartFrame) {
-          const photoIndex = Math.floor((currentFrame - 45) / 75);
-          const localIndex = (currentFrame - 45) % 75;
-
-          if (localIndex < 30) {
-            const countdownValue = Math.ceil((30 - localIndex) / 10);
-            
-            const showRec = Math.floor(currentFrame / 10) % 2 === 0;
-            if (showRec) {
-              ctx.fillStyle = "#ef4444";
-              ctx.beginPath();
-              ctx.arc(60, 80, 10, 0, Math.PI * 2);
-              ctx.fill();
-            }
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 20px monospace";
-            ctx.fillText("REC", 100, 88);
-
-            drawRetroViewfinderBrackets(ctx);
-
-            if (localVideoRef.current) {
-              ctx.save();
-              const vW = 480;
-              const vH = 360;
-              const vX = (720 - vW) / 2;
-              const vY = (1280 - vH) / 2 - 80;
-              ctx.translate(vX + vW, vY);
-              ctx.scale(-1, 1);
-              ctx.drawImage(localVideoRef.current, 0, 0, vW, vH);
-              ctx.restore();
-
-              ctx.strokeStyle = "rgba(255,255,255,0.25)";
-              ctx.lineWidth = 2;
-              ctx.strokeRect(vX, vY, vW, vH);
-            }
-
-            ctx.textAlign = "center";
-            ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
-            ctx.fillRect(0, 0, 720, 1280);
-
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 28px monospace";
-            ctx.fillText(`AMBIL FOTO KE-${photoIndex + 1}`, 360, 480);
-
-            ctx.fillStyle = "#f43f5e";
-            ctx.font = "bold 120px sans-serif";
-            ctx.fillText(`${countdownValue}`, 360, 640);
-
-          } else if (localIndex >= 30 && localIndex < 33) {
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, 720, 1280);
-          } else {
-            ctx.fillStyle = "#ef4444";
-            ctx.beginPath();
-            ctx.arc(60, 80, 10, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 20px monospace";
-            ctx.fillText("CAPTURED", 100, 88);
-
-            const cardW = 460;
-            const cardH = 550;
-            const cardX = (720 - cardW) / 2;
-            const cardY = (1280 - cardH) / 2 - 80;
-
-            ctx.shadowColor = "rgba(0,0,0,0.4)";
-            ctx.shadowBlur = 20;
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(cardX, cardY, cardW, cardH);
-            ctx.shadowColor = "transparent";
-
-            const imgW = 420;
-            const imgH = 315;
-            const imgX = cardX + 20;
-            const imgY = cardY + 20;
-
-            const img = loadedImages[photoIndex];
-            if (img) {
-              ctx.save();
-              const filterPreset = FILTER_PRESETS.find(f => f.id === editState.filter)?.css || "";
-              const sliderBrightness = editState.sliders.brightness;
-              const sliderContrast = editState.sliders.contrast;
-              const sliderSaturation = editState.sliders.saturation;
-              const sliderBlur = editState.sliders.blur;
-
-              ctx.filter = `${filterPreset} brightness(${sliderBrightness}%) contrast(${sliderContrast}%) saturate(${sliderSaturation}%) blur(${sliderBlur}px)`;
-              ctx.drawImage(img, imgX, imgY, imgW, imgH);
-              ctx.restore();
-            } else {
-              ctx.fillStyle = "#1e293b";
-              ctx.fillRect(imgX, imgY, imgW, imgH);
-              ctx.textAlign = "center";
-              ctx.fillStyle = "#475569";
-              ctx.font = "bold 20px monospace";
-              ctx.fillText(`FOTO #${photoIndex + 1}`, 360, imgY + 160);
-            }
-
-            ctx.textAlign = "center";
-            ctx.fillStyle = "#1e293b";
-            ctx.font = "bold 24px monospace";
-            ctx.fillText(`FRAME #${photoIndex + 1} / ${totalPhotosLimit}`, 360, cardY + 410);
-
-            ctx.fillStyle = "#64748b";
-            ctx.font = "16px sans-serif";
-            ctx.fillText("DualBooth Studio Memories", 360, cardY + 460);
-
-            if (localIndex === 33) {
-              playLocalShutterSound();
-            }
-          }
-
-        } else {
-          ctx.textAlign = "center";
-          
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 32px sans-serif";
-          ctx.fillText("DUALBOOTH MEMORIES", 360, 100);
-
-          ctx.fillStyle = "#fda4af";
-          ctx.font = "18px monospace";
-          ctx.fillText("✨ KREASI STUDIO ANDA SELESAI ✨", 360, 140);
-
-          const progress = (currentFrame - finalPhaseStartFrame) / 75;
-          const easeProgress = 1 - Math.pow(1 - progress, 3);
-
-          const aspect = stripCanvas.width / stripCanvas.height;
-          const destHeight = 820;
-          const destWidth = destHeight * aspect;
-          const destX = (720 - destWidth) / 2;
-
-          const startY = 1280;
-          const targetY = 200;
-          const currentY = startY + (targetY - startY) * easeProgress;
-
-          ctx.shadowColor = "rgba(0,0,0,0.6)";
-          ctx.shadowBlur = 35;
-          ctx.drawImage(stripCanvas, destX, currentY, destWidth, destHeight);
-          ctx.shadowColor = "transparent";
-
-          particles.forEach(p => {
-            p.y += p.speedY;
-            p.x += Math.sin(p.y / 40) * 0.8 + p.speedX;
-            p.rotation += p.rotationSpeed;
-            
-            if (p.y > 1280) {
-              p.y = -30;
-              p.x = Math.random() * 720;
-            }
-
+        if (isOnlineDual) {
+          // Left side (Peer 1) - mirrored horizontally!
+          if (vidP1) {
             ctx.save();
-            ctx.translate(p.x, p.y);
-            ctx.rotate((p.rotation * Math.PI) / 180);
-            ctx.fillStyle = p.color;
-            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+            ctx.translate(320, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(vidP1, 0, 0, 320, 480);
             ctx.restore();
-          });
+          } else {
+            ctx.fillStyle = "#1e293b";
+            ctx.fillRect(0, 0, 320, 480);
+          }
+
+          // Right side (Peer 2) - mirrored horizontally!
+          if (vidP2) {
+            ctx.save();
+            ctx.translate(640, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(vidP2, 0, 0, 320, 480);
+            ctx.restore();
+          } else {
+            ctx.fillStyle = "#334155";
+            ctx.fillRect(320, 0, 320, 480);
+          }
+        } else {
+          // Solo mode - mirrored horizontally!
+          const activeVid = vidP1 || vidP2;
+          if (activeVid) {
+            ctx.save();
+            ctx.translate(640, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(activeVid, 0, 0, 640, 480);
+            ctx.restore();
+          } else {
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, 640, 480);
+          }
         }
 
         currentFrame++;
         setVideoProgress(Math.floor((currentFrame / totalFrames) * 100));
         setVideoPhase(`Merender Video: ${Math.floor((currentFrame / totalFrames) * 100)}%`);
 
-      }, 33);
+        setTimeout(executeFrame, 33);
+      };
+
+      // Start the recursive execution loop
+      executeFrame();
 
     } catch (err) {
       console.error("Video Generation Error:", err);
@@ -2260,6 +2568,13 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                     muted={isPeer1}
                     className="w-full h-full object-cover -scale-x-100"
                   />
+                  {/* Corner Countdown Overlay */}
+                  {room?.status === "countdown" && (
+                    <div className="absolute top-4 left-4 z-30 bg-zinc-950/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 shadow-lg text-white font-mono font-black text-xs flex items-center gap-1.5 animate-bounce">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                      <span>{countdownVal ?? room.countdown}s</span>
+                    </div>
+                  )}
                   <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between bg-white/90 backdrop-blur-md px-3 py-2 rounded-xl border border-zinc-200/50 shadow-xs z-20">
                     <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -2295,6 +2610,13 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                       muted={!isPeer1}
                       className="w-full h-full object-cover -scale-x-100"
                     />
+                    {/* Corner Countdown Overlay */}
+                    {room?.status === "countdown" && (
+                      <div className="absolute top-4 left-4 z-30 bg-zinc-950/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 shadow-lg text-white font-mono font-black text-xs flex items-center gap-1.5 animate-bounce">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                        <span>{countdownVal ?? room.countdown}s</span>
+                      </div>
+                    )}
                     <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between bg-white/90 backdrop-blur-md px-3 py-2 rounded-xl border border-zinc-200/50 shadow-xs z-20">
                       <span className="text-xs font-semibold text-zinc-800 flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse" />
@@ -2381,7 +2703,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                               : "text-zinc-500 hover:text-zinc-900"
                           }`}
                         >
-                          👤 Solo (Sendiri)
+                          Solo (Sendiri)
                         </button>
                         <button
                           type="button"
@@ -2392,14 +2714,14 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                               : "text-zinc-500 hover:text-zinc-900"
                           }`}
                         >
-                          👥 Online Dual
+                          Online Dual
                         </button>
                       </div>
                     ) : (
                       <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 flex justify-between items-center">
                         <span>Mode Sesi:</span>
                         <span className="bg-zinc-100 text-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-250 font-bold">
-                          {(room?.boothMode || "online") === "solo" ? "👤 Solo (Sendiri)" : "👥 Online Dual (Split)"}
+                          {(room?.boothMode || "online") === "solo" ? "Solo (Sendiri)" : "Online Dual (Split)"}
                         </span>
                       </div>
                     )}
@@ -2419,7 +2741,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                               : "text-zinc-500 hover:text-zinc-900"
                           }`}
                         >
-                          🎭 Pose Meme
+                          Pose Meme
                         </button>
                         <button
                           type="button"
@@ -2430,47 +2752,15 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                               : "text-zinc-500 hover:text-zinc-900"
                           }`}
                         >
-                          ✨ Gaya Bebas
+                          Gaya Bebas
                         </button>
                       </div>
                     ) : (
                       <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-semibold text-zinc-700 flex justify-between items-center">
                         <span>Panduan Sesi:</span>
                         <span className="bg-zinc-100 text-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-250 font-bold">
-                          {(room?.challengeMode || "meme") === "meme" ? "🎭 Pose Meme" : "✨ Gaya Bebas"}
+                          {(room?.challengeMode || "meme") === "meme" ? "Pose Meme" : "Gaya Bebas"}
                         </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Poses selection / helper list */}
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">
-                      {(room?.challengeMode || "meme") === "meme" ? "Panduan Pose Meme" : "Informasi Gaya Bebas"}
-                    </label>
-                    
-                    {(room?.challengeMode || "meme") === "meme" ? (
-                      <div className="grid grid-cols-1 gap-2.5 max-h-[160px] overflow-y-auto scrollbar-none pr-1">
-                        {allPoseChallenges.map((p) => (
-                          <div key={p.id} className="p-3 rounded-xl bg-zinc-50 border border-zinc-200/80 flex gap-3 items-center">
-                            <div className="w-10 h-10 rounded-lg bg-zinc-200/50 border border-zinc-200 overflow-hidden flex items-center justify-center flex-shrink-0 text-sm">
-                              {p.imageUrl ? (
-                                <img src={p.imageUrl} className="w-full h-full object-cover" alt={p.title} />
-                              ) : (
-                                p.svgType === "cheek_heart" ? "❤️" : p.svgType === "wink_peace" ? "✌️" : "🌸"
-                              )}
-                            </div>
-                            <div>
-                              <h4 className="text-xs font-bold text-zinc-800">{p.title}</h4>
-                              <p className="text-[10px] text-zinc-400 line-clamp-2 mt-0.5 leading-relaxed">{p.description}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200/60 text-zinc-600 text-xs leading-relaxed space-y-1">
-                        <p className="font-semibold text-amber-800">✨ Mode Gaya Bebas Aktif!</p>
-                        <p className="text-zinc-500">Anda tidak perlu meniru pose meme apa pun. Ekspresikan momen seru Anda bersama rekan secara bebas dan menyenangkan!</p>
                       </div>
                     )}
                   </div>
@@ -2478,16 +2768,11 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
 
                 <div className="pt-4">
                   {room?.status === "countdown" ? (
-                    <div className="w-full bg-zinc-50 border border-zinc-200 rounded-xl py-6 flex flex-col items-center justify-center relative overflow-hidden">
-                      <motion.span
-                        key={countdownVal ?? room.countdown}
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1.1, opacity: 1 }}
-                        className="text-5xl font-extrabold text-zinc-900 font-mono tracking-tighter"
-                      >
-                        {countdownVal ?? room.countdown}
-                      </motion.span>
-                      <span className="text-[9px] font-bold text-zinc-400 tracking-widest uppercase mt-3">KAMERA DIBUKA</span>
+                    <div className="w-full bg-zinc-50 border border-zinc-200 rounded-xl py-4 flex flex-col items-center justify-center relative overflow-hidden">
+                      <span className="text-xs font-bold text-zinc-500 tracking-wider uppercase flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                        Sedang Mengambil Foto ({currentPhotoCount + 1}/{allFrameStyles.find(f => f.id === editState.frame)?.slots?.length || 4})
+                      </span>
                     </div>
                   ) : (
                     <button
@@ -2526,10 +2811,12 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                     editState.backgroundType === "tekstur-film" ? "vintage-overlay bg-grain" : ""
                   }`}
                   style={{
-                    backgroundColor: editState.backgroundType === "warna-polos" ? (activeFrameConfig?.bgColor || editState.backgroundColor) : undefined,
-                    backgroundImage: editState.backgroundType === "gradient-lembut"
-                      ? editState.backgroundGradient
-                      : (activeFrameConfig?.frameBackgroundImageUrl ? `url(${activeFrameConfig.frameBackgroundImageUrl})` : undefined),
+                    backgroundColor: editState.backgroundType === "warna-polos" ? editState.backgroundColor : undefined,
+                    backgroundImage: editState.frameImage
+                      ? `url(${editState.frameImage})`
+                      : (editState.backgroundType === "gradient-lembut"
+                          ? editState.backgroundGradient
+                          : (activeFrameConfig?.frameBackgroundImageUrl ? `url(${activeFrameConfig.frameBackgroundImageUrl})` : undefined)),
                     backgroundSize: "cover",
                     padding: `${editState.borderThickness}px`,
                     borderRadius: `${editState.borderRadius}px`,
@@ -2581,10 +2868,13 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                       const isOnlineDual = room?.boothMode !== "solo" && !!room?.peer2;
 
                       const activeFilterCss = FILTER_PRESETS.find(f => f.id === editState.filter)?.css || "";
+                      const clipUrl = recordedClipsP1[idx] || recordedClipsP2[idx];
 
                       return (
                         <div
                           key={idx}
+                          onMouseEnter={() => setHoveredPhotoIdx(idx)}
+                          onMouseLeave={() => setHoveredPhotoIdx(null)}
                           className={`relative overflow-hidden aspect-[4/3] rounded-lg bg-zinc-100 transition-all ${
                             editState.innerBorder ? "border border-white/20" : ""
                           }`}
@@ -2595,7 +2885,19 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                           {isOnlineDual ? (
                             <div className="w-full h-full flex divide-x divide-white/40">
                               <div className="w-1/2 h-full relative overflow-hidden bg-zinc-50">
-                                {p1 ? (
+                                {hoveredPhotoIdx === idx && recordedClipsP1[idx] ? (
+                                  <video
+                                    src={recordedClipsP1[idx]}
+                                    autoPlay
+                                    loop
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover select-none"
+                                    style={{
+                                      filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`
+                                    }}
+                                  />
+                                ) : p1 ? (
                                   <img
                                     src={p1}
                                     className="w-full h-full object-cover select-none"
@@ -2611,7 +2913,19 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                                 )}
                               </div>
                               <div className="w-1/2 h-full relative overflow-hidden bg-zinc-100">
-                                {p2 ? (
+                                {hoveredPhotoIdx === idx && recordedClipsP2[idx] ? (
+                                  <video
+                                    src={recordedClipsP2[idx]}
+                                    autoPlay
+                                    loop
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover select-none"
+                                    style={{
+                                      filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`
+                                    }}
+                                  />
+                                ) : p2 ? (
                                   <img
                                     src={p2}
                                     className="w-full h-full object-cover select-none"
@@ -2628,7 +2942,19 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                               </div>
                             </div>
                           ) : (
-                            imgSrc ? (
+                            hoveredPhotoIdx === idx && clipUrl ? (
+                              <video
+                                src={clipUrl}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                className="w-full h-full object-cover select-none"
+                                style={{
+                                  filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`
+                                }}
+                              />
+                            ) : imgSrc ? (
                               <img
                                 src={imgSrc}
                                 className="w-full h-full object-cover select-none"
@@ -2678,7 +3004,11 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                             zIndex: stk.zIndex
                           }}
                         >
-                          <span className="text-4xl block">{stk.char}</span>
+                          {stk.char.startsWith("http") || stk.char.startsWith("/") || stk.char.includes(".") ? (
+                            <img src={stk.char} className="w-12 h-12 object-contain pointer-events-none select-none" alt="Sticker" />
+                          ) : (
+                            <span className="text-4xl block">{stk.char}</span>
+                          )}
                         </div>
                       );
                     })}
@@ -2784,11 +3114,10 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
               {/* Studio Tabs */}
               <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200/80 p-1 rounded-xl overflow-x-auto scrollbar-none mb-6 w-full">
                 {[
-                  { id: "frame", name: "Frame & Bg", icon: Palette },
-                  { id: "filter", name: "Filter & Tune", icon: Sliders },
+                  { id: "frame", name: "Frame", icon: Palette },
+                  { id: "filter", name: "Filter", icon: Sliders },
                   { id: "stickers", name: "Stiker", icon: Smile },
                   { id: "text", name: "Teks", icon: Type },
-                  { id: "poses", name: "Pose Ide", icon: Eye },
                   { id: "download", name: "Cetak", icon: Download }
                 ].map((tab) => {
                   const IconComp = tab.icon;
@@ -2812,6 +3141,65 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
               {/* TAB CONTENT: FRAME & LAYOUT & BG */}
               {activeTab === "frame" && (
                 <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
+                  {/* Custom Frame Image Upload */}
+                  <div className="space-y-3 bg-rose-50/50 p-4 rounded-xl border border-rose-100/60">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-zinc-500 tracking-widest uppercase block">Gunakan Frame Gambar Sendiri</label>
+                      {editState.frameImage && (
+                        <button
+                          onClick={() => {
+                            const nextState = { ...editState, frameImage: "" };
+                            setEditState(nextState);
+                            syncEditStateToFirebase(nextState);
+                          }}
+                          className="text-[9px] font-bold text-rose-500 hover:underline"
+                        >
+                          Hapus Gambar
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 hover:border-zinc-300 transition-all rounded-xl p-4 bg-white cursor-pointer relative">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              const result = event.target?.result as string;
+                              const nextState = { ...editState, frameImage: result };
+                              setEditState(nextState);
+                              syncEditStateToFirebase(nextState);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                      {editState.frameImage ? (
+                        <div className="flex items-center gap-3 w-full">
+                          <img
+                            src={editState.frameImage}
+                            className="w-12 h-16 object-cover rounded-lg border border-zinc-200"
+                            alt="Custom frame"
+                          />
+                          <div className="flex-1 text-left">
+                            <p className="text-[10px] font-bold text-zinc-700">Frame Gambar Berhasil Dimuat</p>
+                            <p className="text-[9px] text-zinc-400">Gambar kustom Anda akan menimpa seluruh background photostrip.</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-2">
+                          <Upload className="w-5 h-5 text-zinc-400 mx-auto mb-2" />
+                          <p className="text-[10px] font-bold text-zinc-700">Klik / Seret Gambar Frame Anda</p>
+                          <p className="text-[9px] text-zinc-400 mt-1">Ugah file PNG transparan untuk frame estetik kustom.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Visual Frame Selectors */}
                   <div className="space-y-3">
                     <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Desain Frame Visual</label>
@@ -2834,36 +3222,10 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                               : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100"
                           }`}
                         >
-                          <span className="text-2xl mt-0.5">{style.icon}</span>
                           <div>
                             <h4 className="text-xs font-bold leading-none">{style.name}</h4>
                             <p className="text-[9px] text-zinc-400 mt-1.5 leading-relaxed">{style.desc}</p>
                           </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Layout Option Selectors */}
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Pilihan Layout Cetak</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {LAYOUT_PRESETS.map((ly) => (
-                        <button
-                          key={ly.id}
-                          onClick={() => {
-                            const nextState = { ...editState, layout: ly.id };
-                            setEditState(nextState);
-                            syncEditStateToFirebase(nextState);
-                          }}
-                          className={`p-3 rounded-xl border text-center transition-all ${
-                            editState.layout === ly.id
-                              ? "bg-zinc-900 border-zinc-900 text-white shadow-xs"
-                              : "bg-zinc-50 border-zinc-200 text-zinc-500 hover:text-zinc-800"
-                          }`}
-                        >
-                          <span className="text-lg block mb-1">{ly.icon}</span>
-                          <span className="text-[10px] font-bold block">{ly.name}</span>
                         </button>
                       ))}
                     </div>
@@ -2959,7 +3321,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                 <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
                   {/* Presets Grid */}
                   <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Lightroom Preset Filters</label>
+                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Pilihan Filter</label>
                     <div className="grid grid-cols-3 gap-2">
                       {FILTER_PRESETS.map((f) => (
                         <button
@@ -2969,14 +3331,13 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                             setEditState(nextState);
                             syncEditStateToFirebase(nextState);
                           }}
-                          className={`p-3 rounded-xl border text-left transition-all ${
+                          className={`p-3.5 rounded-xl border text-center transition-all flex items-center justify-center ${
                             editState.filter === f.id
                               ? "bg-zinc-900 border-zinc-900 text-white shadow-xs"
                               : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100"
                           }`}
                         >
                           <span className="text-xs font-bold block">{f.name}</span>
-                          <span className="text-[9px] text-zinc-400 block leading-normal mt-1">{f.desc}</span>
                         </button>
                       ))}
                     </div>
@@ -3091,15 +3452,22 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                   {/* Sticker List Grid */}
                   <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-200">
                     <div className="grid grid-cols-6 gap-3 max-h-[240px] overflow-y-auto scrollbar-none">
-                      {STICKER_LIST[selectedStickerCategory].map((stk, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleAddSticker(stk)}
-                          className="p-3 rounded-xl bg-white hover:bg-zinc-100 border border-zinc-200 text-3xl transition-all flex items-center justify-center active:scale-95 shadow-xs"
-                        >
-                          {stk}
-                        </button>
-                      ))}
+                      {STICKER_LIST[selectedStickerCategory].map((stk, idx) => {
+                        const isImg = stk.startsWith("http") || stk.startsWith("/") || stk.includes(".");
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => handleAddSticker(stk)}
+                            className="p-2 rounded-xl bg-white hover:bg-zinc-100 border border-zinc-200 text-3xl transition-all flex items-center justify-center active:scale-95 shadow-xs aspect-square"
+                          >
+                            {isImg ? (
+                              <img src={stk} className="w-8 h-8 object-contain" alt="Sticker" />
+                            ) : (
+                              stk
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -3203,67 +3571,93 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                 </div>
               )}
 
-              {/* TAB CONTENT: POSE CHALLENGES PREVIEW */}
-              {activeTab === "poses" && (
-                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {allPoseChallenges.map((pose) => (
-                      <div key={pose.id} className="bg-zinc-50 p-4 rounded-xl border border-zinc-200 flex flex-col gap-3">
-                        <div className="w-full h-24 rounded-lg bg-white border border-zinc-200 overflow-hidden flex items-center justify-center text-3xl select-none shadow-xs">
-                          {pose.imageUrl ? (
-                            <img src={pose.imageUrl} className="w-full h-full object-cover" alt={pose.title} />
-                          ) : (
-                            pose.svgType === "cheek_heart" ? "❤️" : pose.svgType === "wink_peace" ? "✌️" : "🌸"
-                          )}
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-zinc-800 uppercase tracking-wide">{pose.title}</h4>
-                          <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">{pose.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* TAB CONTENT: ADVANCED PRINT & FILE EXPORT OPTIONS */}
               {activeTab === "download" && (
                 <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
                   <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Pilih Resolusi & Format Hasil</label>
-                    <div className="grid grid-cols-1 gap-2.5 max-h-[320px] overflow-y-auto scrollbar-none">
-                      {/* Video generator option */}
-                      <button
-                        onClick={compileAndSaveVideo}
-                        className="p-4 rounded-xl border border-dashed border-zinc-300 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group relative overflow-hidden"
-                      >
-                        <div className="relative z-10">
-                          <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-zinc-800 animate-spin-slow" />
-                            Video Stop-Motion MP4 (Reels Ready)
-                          </h4>
-                          <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Buat video reels estetik berisi animasi capture proses foto & transisi strip.</p>
+                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Simpan & Ekspor Hasil Karya</label>
+                    
+                    {/* Status Progress Penyiapan GIF */}
+                    {isGifGenerating && (
+                      <div className="p-4 bg-zinc-900 text-white rounded-xl space-y-2 animate-pulse">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span>Sedang Membuat Animasi GIF...</span>
+                          <span>{gifProgress}%</span>
                         </div>
-                        <span className="relative z-10 text-[9px] bg-zinc-900 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider text-white font-mono flex items-center gap-1 shadow-xs">
-                          <Camera className="w-3 h-3" /> MP4
+                        <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
+                          <div className="bg-rose-500 h-full transition-all duration-300" style={{ width: `${gifProgress}%` }} />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-2.5">
+                      {/* Button 1: Download Gambar */}
+                      <button
+                        onClick={() => triggerPrintingFlow("png-2k")}
+                        disabled={isPrinting || isGifGenerating || isVideoGenerating}
+                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50"
+                      >
+                        <div>
+                          <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">
+                            Download Gambar (2R - Solo)
+                          </h4>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Simpan hasil foto strip tunggal dalam resolusi tinggi format PNG.</p>
+                        </div>
+                        <span className="text-[9px] bg-zinc-900 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider text-white font-mono shadow-xs">
+                          PNG 2K
                         </span>
                       </button>
 
-                      {DOWNLOAD_RATIOS.map((ratio) => (
-                        <button
-                          key={ratio.id}
-                          onClick={() => triggerPrintingFlow(ratio.id)}
-                          className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group"
-                        >
-                          <div>
-                            <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">{ratio.name}</h4>
-                            <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">{ratio.desc}</p>
-                          </div>
-                          <span className="text-[9px] bg-zinc-200 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider text-zinc-600 font-mono shadow-xs">
-                            {ratio.format}
-                          </span>
-                        </button>
-                      ))}
+                      {/* Button: Cetak Foto (4R - Kertas Printer) */}
+                      <button
+                        onClick={() => triggerPrintingFlow("printable-4r")}
+                        disabled={isPrinting || isGifGenerating || isVideoGenerating}
+                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50"
+                      >
+                        <div>
+                          <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">
+                            Cetak Foto (4R - Kertas Printer)
+                          </h4>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Kombinasikan dua lembar strip 2R berdampingan dalam satu kertas cetak foto ukuran 4R siap potong di tengah.</p>
+                        </div>
+                        <span className="text-[9px] bg-indigo-600 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider text-white font-mono shadow-xs">
+                          4R PNG
+                        </span>
+                      </button>
+
+                      {/* Button 2: GIF Gambar */}
+                      <button
+                        onClick={compileAndSaveGif}
+                        disabled={isPrinting || isGifGenerating || isVideoGenerating}
+                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50"
+                      >
+                        <div>
+                          <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">
+                            GIF Gambar
+                          </h4>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Simpan animasi stop-motion berulang dari seluruh pose foto Anda.</p>
+                        </div>
+                        <span className="text-[9px] bg-zinc-200 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider text-zinc-600 font-mono shadow-xs">
+                          GIF
+                        </span>
+                      </button>
+
+                      {/* Button 3: Live Photo (Video MP4) */}
+                      <button
+                        onClick={compileAndSaveVideo}
+                        disabled={isPrinting || isGifGenerating || isVideoGenerating}
+                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50"
+                      >
+                        <div>
+                          <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">
+                            Live Photo
+                          </h4>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Simpan video stop-motion estetik dengan efek transisi ala iPhone.</p>
+                        </div>
+                        <span className="text-[9px] bg-rose-100 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider text-rose-600 font-mono shadow-xs">
+                          MP4
+                        </span>
+                      </button>
                     </div>
                   </div>
 

@@ -89,7 +89,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#ffffff",
     textColor: "#0f172a",
     borderStyle: "border border-slate-900/10",
-    icon: "🔳"
+    icon: ""
   },
   {
     id: "vintage",
@@ -98,7 +98,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#e6dfcc",
     textColor: "#4e3b2b",
     borderStyle: "border border-amber-900/15 bg-paper",
-    icon: "📜"
+    icon: ""
   },
   {
     id: "disposable",
@@ -107,7 +107,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#2d3e33",
     textColor: "#fdba74",
     borderStyle: "border border-emerald-950/20",
-    icon: "📷"
+    icon: ""
   },
   {
     id: "y2k",
@@ -116,7 +116,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#d9f99d", // Lime base
     textColor: "#1e3a1e",
     borderStyle: "border border-lime-300",
-    icon: "🌌"
+    icon: ""
   },
   {
     id: "korean",
@@ -125,7 +125,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#fafafa",
     textColor: "#18181b",
     borderStyle: "border border-zinc-100",
-    icon: "🌸"
+    icon: ""
   },
   {
     id: "cinema",
@@ -134,7 +134,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#111111",
     textColor: "#f97316",
     borderStyle: "border border-neutral-800",
-    icon: "🎬"
+    icon: ""
   },
   {
     id: "polaroid",
@@ -143,7 +143,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#fefefe",
     textColor: "#0f172a",
     borderStyle: "border border-slate-100 shadow-2xl",
-    icon: "📸"
+    icon: ""
   },
   {
     id: "scrapbook",
@@ -152,7 +152,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#fed7aa", // Orange-pastel
     textColor: "#7c2d12",
     borderStyle: "border border-orange-200",
-    icon: "🧸"
+    icon: ""
   },
   {
     id: "minimal",
@@ -161,7 +161,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#ffffff",
     textColor: "#71717a",
     borderStyle: "border border-transparent",
-    icon: "🍃"
+    icon: ""
   },
   {
     id: "retro",
@@ -170,7 +170,7 @@ export const FRAME_STYLES: FrameStyle[] = [
     bgColor: "#ea580c", // Deep orange
     textColor: "#fef3c7",
     borderStyle: "border border-orange-700",
-    icon: "📻"
+    icon: ""
   }
 ];
 
@@ -180,19 +180,35 @@ export interface StickerTemplate {
 }
 
 export const STICKER_LIST: Record<string, string[]> = {
-  "Smile": ["😊", "😄", "😎", "🥳", "🥰", "😜", "🤩", "🤪", "🤠", "🥺"],
-  "Sparkle": ["✨", "🌟", "⭐", "💫", "⚡", "💥", "🔥"],
-  "Stars": ["⭐", "🌙", "🌠", "🌌", "🪐", "🌟"],
-  "Cloud": ["☁️", "🌧️", "⛅", "🎈", "🌈", "☀️", "💧"],
-  "Flower": ["🌸", "🌹", "🌻", "🌷", "🍀", "🌼", "🌿", "🍁"],
-  "Heart": ["❤️", "💖", "💝", "💕", "💘", "💌", "🧡", "💛", "💚", "💙", "💜"],
-  "Tape": ["Tape_Pink", "Tape_Grid", "Tape_Washi", "Tape_Yellow", "Tape_Blue"],
-  "Paper": ["Paper_Note", "Paper_Torn", "Paper_Label", "Paper_Stamp"],
-  "Camera": ["📷", "📹", "🎞️", "🎬", "🎙️", "👓"],
-  "Ribbon": ["🎀", "🎗️", "🧸", "🎒", "👒", "👑"],
-  "Pixel": ["👾", "🎮", "👾", "❤️‍🔥", "⚡", "👾"],
-  "Emoji": ["🔥", "🍕", "🍦", "🍩", "🐱", "🐶", "🦄", "🍒", "🍓", "🍟", "🥤"],
-  "Doodle": ["Doodle_Crown", "Doodle_Cat", "Doodle_Heart", "Doodle_Sparkle", "Doodle_Halo", "Doodle_Arrow"]
+  "Cute 3D": [
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Teddy%20bear/3D/teddy_bear_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Unicorn/3D/unicorn_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Cat%20face/3D/cat_face_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Alien%20monster/3D/alien_monster_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Smiling%20face%20with%20sunglasses/3D/smiling_face_with_sunglasses_3d.png"
+  ],
+  "Cinta & Hati": [
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Sparkling%20heart/3D/sparkling_heart_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Heart%20with%20ribbon/3D/heart_with_ribbon_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Heart%20hands/Medium-light/3D/heart_hands_3d_medium-light.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Love%20letter/3D/love_letter_3d.png"
+  ],
+  "Aesthetic Decor": [
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Sparkles/3D/sparkles_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Star/3D/star_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Sun%20with%20face/3D/sun_with_face_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Rainbow/3D/rainbow_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Cherry%20blossom/3D/cherry_blossom_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Fire/3D/fire_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Lollipop/3D/lollipop_3d.png"
+  ],
+  "Y2K & Retro": [
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Crown/3D/crown_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Camera/3D/camera_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Ribbon/3D/ribbon_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Video%20camera/3D/video_camera_3d.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Magic%20wand/3D/magic_wand_3d.png"
+  ]
 };
 
 export interface FontOption {
@@ -225,13 +241,13 @@ export interface LayoutPreset {
 }
 
 export const LAYOUT_PRESETS: LayoutPreset[] = [
-  { id: "4-vertical", name: "4 Foto Vertikal", cols: 1, rows: 4, width: 320, height: 240, aspect: "aspect-[3/4]", icon: "❙" },
-  { id: "2x2", name: "Square 2x2 Grid", cols: 2, rows: 2, width: 320, height: 240, aspect: "aspect-square", icon: "田" },
-  { id: "polaroid", name: "Classic Polaroid Single", cols: 1, rows: 1, width: 480, height: 360, aspect: "aspect-[4/5]", icon: "🖼️" },
-  { id: "horizontal", name: "Horizontal Strip", cols: 4, rows: 1, width: 320, height: 240, aspect: "aspect-[4/1]", icon: "▬" },
-  { id: "mini-strip", name: "Mini Strip (2 Foto)", cols: 1, rows: 2, width: 320, height: 240, aspect: "aspect-[3/5]", icon: "▰" },
-  { id: "long-strip", name: "Long Strip Stack", cols: 1, rows: 4, width: 280, height: 210, aspect: "aspect-[1/5]", icon: "║" },
-  { id: "square-grid", name: "Grid Polaroid Combo", cols: 2, rows: 2, width: 300, height: 300, aspect: "aspect-[1/1]", icon: "🔳" }
+  { id: "4-vertical", name: "4 Foto Vertikal", cols: 1, rows: 4, width: 320, height: 240, aspect: "aspect-[3/4]", icon: "" },
+  { id: "2x2", name: "Square 2x2 Grid", cols: 2, rows: 2, width: 320, height: 240, aspect: "aspect-square", icon: "" },
+  { id: "polaroid", name: "Classic Polaroid Single", cols: 1, rows: 1, width: 480, height: 360, aspect: "aspect-[4/5]", icon: "" },
+  { id: "horizontal", name: "Horizontal Strip", cols: 4, rows: 1, width: 320, height: 240, aspect: "aspect-[4/1]", icon: "" },
+  { id: "mini-strip", name: "Mini Strip (2 Foto)", cols: 1, rows: 2, width: 320, height: 240, aspect: "aspect-[3/5]", icon: "" },
+  { id: "long-strip", name: "Long Strip Stack", cols: 1, rows: 4, width: 280, height: 210, aspect: "aspect-[1/5]", icon: "" },
+  { id: "square-grid", name: "Grid Polaroid Combo", cols: 2, rows: 2, width: 300, height: 300, aspect: "aspect-[1/1]", icon: "" }
 ];
 
 export interface DownloadRatio {
@@ -268,6 +284,11 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
   { id: "bg-pastel-blue", name: "Powder Blue", type: "warna-polos", value: "#e0f2fe" },
   { id: "bg-pastel-yellow", name: "Lemon Custard", type: "warna-polos", value: "#fef9c3" },
   { id: "bg-pastel-green", name: "Mint Foam", type: "warna-polos", value: "#dcfce7" },
+  { id: "bg-soft-lilac", name: "Soft Lilac", type: "warna-polos", value: "#f3e8ff" },
+  { id: "bg-soft-peach", name: "Soft Peach", type: "warna-polos", value: "#ffedd5" },
+  { id: "bg-soft-sage", name: "Soft Sage", type: "warna-polos", value: "#f0fdf4" },
+  { id: "bg-soft-lavender", name: "Soft Lavender", type: "warna-polos", value: "#e0e7ff" },
+  { id: "bg-soft-sand", name: "Soft Sand", type: "warna-polos", value: "#f5f5f4" },
   
   // Gradients
   { id: "grad-sunset", name: "Sunset Horizon", type: "gradient-lembut", value: "linear-gradient(135deg, #fecdd3 0%, #ffedd5 100%)" },
