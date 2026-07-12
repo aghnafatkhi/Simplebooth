@@ -1,0 +1,11 @@
+{
+  "name": "DualBooth",
+  "description": "A real-time shared virtual photobooth to capture beautiful memories together, complete with customized photostrips.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

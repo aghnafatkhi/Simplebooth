@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default Deny Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Rooms Collection
+    match /rooms/{roomId} {
+      allow read, write: if roomId is string && roomId.size() >= 3 && roomId.size() <= 10;
+    }
+
+    // Custom Poses Collection
+    match /custom_poses/{poseId} {
+      allow read, write: if true;
+    }
+
+    // Custom Frames Collection
+    match /custom_frames/{frameId} {
+      allow read, write: if true;
+    }
+  }
+}

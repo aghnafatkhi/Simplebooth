@@ -1,0 +1,181 @@
+{
+  "entities": {
+    "Peer": {
+      "title": "Peer",
+      "description": "Information about a user in the photobooth room",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "User custom name"
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of joining"
+        }
+      },
+      "required": ["id", "name", "joinedAt"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "DualBooth real-time photobooth session room",
+      "type": "object",
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "description": "Unique 6-character room code"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "ready", "countdown", "captured", "completed"],
+          "description": "Current state of the photobooth session"
+        },
+        "countdown": {
+          "type": "integer",
+          "description": "Seconds left for countdown"
+        },
+        "countdownStartedAt": {
+          "type": "integer",
+          "description": "Unix millisecond timestamp when countdown started"
+        },
+        "peer1": {
+          "$ref": "#/entities/Peer",
+          "description": "Primary room creator peer"
+        },
+        "peer2": {
+          "$ref": "#/entities/Peer",
+          "description": "Joined guest peer"
+        },
+        "photos1": {
+          "type": "array",
+          "description": "Base64 jpeg encoded photo array captured by peer1"
+        },
+        "photos2": {
+          "type": "array",
+          "description": "Base64 jpeg encoded photo array captured by peer2"
+        },
+        "stripTemplate": {
+          "type": "string",
+          "enum": ["classic", "retro", "colorful", "dark"],
+          "description": "Selected strip design style"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO updated timestamp"
+        },
+        "sdpOffer": {
+          "type": "string",
+          "description": "WebRTC offer SDP"
+        },
+        "sdpAnswer": {
+          "type": "string",
+          "description": "WebRTC answer SDP"
+        },
+        "candidates1": {
+          "type": "array",
+          "description": "Gathered ICE candidates from Peer1"
+        },
+        "candidates2": {
+          "type": "array",
+          "description": "Gathered ICE candidates from Peer2"
+        }
+      },
+      "required": ["roomId", "status", "createdAt", "updatedAt"]
+    },
+    "CustomPose": {
+      "title": "CustomPose",
+      "description": "Custom pose referenced by both users, managed by admin",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique pose ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Pose challenge title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of how to perform the pose"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL of the famous meme image"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO creation timestamp"
+        }
+      },
+      "required": ["id", "title", "description", "imageUrl"]
+    },
+    "CustomFrame": {
+      "title": "CustomFrame",
+      "description": "Custom designed frame template, managed by admin",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique frame ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Frame design name"
+        },
+        "desc": {
+          "type": "string",
+          "description": "Frame design description"
+        },
+        "bgColor": {
+          "type": "string",
+          "description": "Frame background color hex code"
+        },
+        "textColor": {
+          "type": "string",
+          "description": "Frame text labels color hex code"
+        },
+        "frameBackgroundImageUrl": {
+          "type": "string",
+          "description": "Optional background image texture/pattern URL"
+        },
+        "frameOverlayImageUrl": {
+          "type": "string",
+          "description": "Optional overlay image URL with transparency"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO creation timestamp"
+        }
+      },
+      "required": ["id", "name", "desc", "bgColor", "textColor"]
+    }
+  },
+  "firestore": {
+    "/rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Firestore collection of active dualbooth room sessions"
+    },
+    "/custom_poses/{poseId}": {
+      "schema": "CustomPose",
+      "description": "Custom poses curated by the admin"
+    },
+    "/custom_frames/{frameId}": {
+      "schema": "CustomFrame",
+      "description": "Custom frames designed by the admin"
+    }
+  }
+}
