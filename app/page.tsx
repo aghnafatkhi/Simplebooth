@@ -3,20 +3,19 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { signInAnonymously } from "firebase/auth";
-import { db, auth, handleFirestoreError, OperationType } from "@/lib/firebase";
-import { Camera, Plus, ArrowRight, Sparkles, Image as ImageIcon, Lock } from "lucide-react";
+import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
+import { Camera, Plus, ArrowRight, Sparkles, Image as ImageIcon, Lock, ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Home() {
   const router = useRouter();
+  const [step, setStep] = useState<"choose_mode" | "setup_solo" | "setup_duo">("choose_mode");
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load persisted name and ensure user id
     if (typeof window !== "undefined") {
       const savedName = sessionStorage.getItem("db_username") || "";
       setName(savedName);
@@ -33,10 +32,7 @@ export default function Home() {
     if (!name.trim()) {
       throw new Error("Silakan masukkan nama Anda terlebih dahulu.");
     }
-    
-    // Persist username
     sessionStorage.setItem("db_username", name.trim());
-
     let userId = sessionStorage.getItem("db_userid");
     if (!userId) {
       userId = "user_" + Math.random().toString(36).substring(2, 12);
@@ -45,8 +41,7 @@ export default function Home() {
     return userId;
   };
 
-  const handleCreateRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateRoom = async (mode: "solo" | "online") => {
     if (isLoading) return;
     setError(null);
     setIsLoading(true);
@@ -54,22 +49,46 @@ export default function Home() {
     try {
       const uId = await handleSignIn();
       const generatedId = Math.random().toString(36).substring(2, 8).toUpperCase();
-
       const roomRef = doc(db, "rooms", generatedId);
+
       await setDoc(roomRef, {
         roomId: generatedId,
         status: "waiting",
         countdown: 5,
         countdownStartedAt: null,
+        boothMode: mode,
         peer1: {
           id: uId,
           name: name.trim(),
           joinedAt: new Date().toISOString(),
+          status: "online"
         },
         peer2: null,
         photos1: [],
         photos2: [],
         stripTemplate: "classic",
+        editState: {
+          frame: "classic",
+          layout: "4-vertical",
+          filter: "natural",
+          backgroundColor: "#ffffff",
+          backgroundType: "warna-polos",
+          backgroundGradient: "linear-gradient(135deg, #fecdd3 0%, #ffedd5 100%)",
+          texts: [],
+          stickers: [],
+          borderRadius: 0,
+          borderThickness: 12,
+          innerBorder: false,
+          outerBorder: false,
+          borderColor: "#000000",
+          borderShadow: false,
+          sliders: {
+            brightness: 100,
+            contrast: 100,
+            saturation: 100,
+            blur: 0
+          }
+        },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }).catch((err) => {
@@ -79,18 +98,7 @@ export default function Home() {
       router.push(`/room/${generatedId}`);
     } catch (err: any) {
       console.error("Gagal membuat ruang:", err);
-      let displayError = "Gagal membuat ruang. Coba lagi.";
-      try {
-        const parsed = JSON.parse(err.message);
-        if (parsed.error) {
-          displayError = `Gagal membuat ruang: ${parsed.error}`;
-        }
-      } catch {
-        if (err instanceof Error) {
-          displayError = err.message;
-        }
-      }
-      setError(displayError);
+      setError(err.message || "Gagal membuat ruang. Coba lagi.");
       setIsLoading(false);
     }
   };
@@ -139,159 +147,250 @@ export default function Home() {
       router.push(`/room/${cleanCode}`);
     } catch (err: any) {
       console.error("Gagal bergabung ke ruang:", err);
-      let displayError = "Gagal bergabung ke ruang. Coba lagi.";
-      try {
-        const parsed = JSON.parse(err.message);
-        if (parsed.error) {
-          displayError = `Gagal bergabung: ${parsed.error}`;
-        }
-      } catch {
-        if (err instanceof Error) {
-          displayError = err.message;
-        }
-      }
-      setError(displayError);
+      setError(err.message || "Gagal bergabung ke ruang. Coba lagi.");
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-5 py-8 md:py-16 relative bg-gradient-to-b from-[#FAF9F5] to-[#F3F2EC]">
-      <div className="w-full max-w-md space-y-8 z-10">
-        <div className="text-center space-y-4">
+    <div className="flex flex-col items-center justify-center min-h-screen px-5 py-8 md:py-16 relative bg-gradient-to-b from-[#FAF9F5] to-[#F3F2EC] text-zinc-900 overflow-hidden">
+      <div className="w-full max-w-md space-y-8 z-10 animate-fade-in">
+        <div className="text-center space-y-3 animate-fade-in">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 150, damping: 25 }}
-            className="inline-flex p-3.5 rounded-full bg-zinc-900 text-white shadow-sm"
+            className="inline-flex p-3.5 rounded-full bg-zinc-900 text-white shadow-md"
           >
             <Camera className="w-6 h-6" />
           </motion.div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <motion.h1
               initial={{ y: -6, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.1 }}
-              className="text-3xl md:text-4xl font-extrabold tracking-tight text-zinc-900 font-modern"
+              className="text-3xl font-black tracking-tight text-zinc-900"
             >
-              DualBooth
+              DualBooth Studio
             </motion.h1>
-            <motion.p
-              initial={{ y: 6, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="text-zinc-500 text-xs md:text-sm max-w-xs mx-auto leading-relaxed"
-            >
-              Virtual photobooth real-time bersama teman. Ambil 4 foto seru dan cetak photostrip estetik secara instan.
-            </motion.p>
+            <p className="text-zinc-500 text-xs">Aplikasi Photobooth Virtual Terbaik</p>
           </div>
         </div>
 
-        <motion.div
-          initial={{ y: 15, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm space-y-6"
-        >
-          <div className="space-y-5">
-            {/* Input Name Section */}
-            <div className="space-y-2">
-              <label htmlFor="user-name" className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">
-                Nama Anda
-              </label>
-              <input
-                id="user-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Masukkan nama panggilan Anda..."
-                maxLength={20}
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-zinc-900 outline-none transition-all placeholder:text-zinc-400 text-zinc-900 font-medium"
-              />
-            </div>
-
-            <AnimatePresence mode="wait">
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="bg-rose-5 border border-rose-100 rounded-xl p-3 text-rose-600 text-xs text-center font-medium"
-                >
-                  {error}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="space-y-4">
-              {/* Create Room Option */}
-              <form onSubmit={handleCreateRoom}>
-                <button
-                  type="submit"
-                  disabled={isLoading || !name.trim()}
-                  className="w-full bg-zinc-900 text-white font-semibold py-3 px-4 rounded-xl shadow-sm hover:bg-zinc-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  {isLoading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4" />
-                      Buat Ruang Baru
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* Divider */}
-              <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-zinc-200"></div>
-                <span className="flex-shrink mx-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                  Atau Gabung Sesi
-                </span>
-                <div className="flex-grow border-t border-zinc-200"></div>
+        <AnimatePresence mode="wait">
+          {step === "choose_mode" && (
+            <motion.div
+              key="choose_mode"
+              initial={{ x: 50, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -50, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-md space-y-6"
+            >
+              <div className="text-center space-y-1">
+                <h2 className="text-xl font-bold text-zinc-900">Pilih Mode</h2>
+                <p className="text-xs text-zinc-400">Silakan pilih jenis sesi pemotretan Anda</p>
               </div>
 
-              {/* Join Room Option */}
-              <form onSubmit={handleJoinRoom} className="space-y-3">
-                <div className="flex gap-2">
+              <div className="grid grid-cols-1 gap-4">
+                <button
+                  id="btn-foto-sendiri"
+                  onClick={() => setStep("setup_solo")}
+                  className="group flex flex-col items-center justify-center p-6 border border-zinc-200 hover:border-zinc-400 rounded-2xl bg-zinc-50 hover:bg-white hover:shadow-lg transition-all text-center space-y-3 cursor-pointer"
+                >
+                  <span className="text-4xl">📷</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 group-hover:text-black">📷 Foto Sendiri</h3>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">Sesi photobooth solo instan langsung pakai</p>
+                  </div>
+                </button>
+
+                <button
+                  id="btn-foto-berdua"
+                  onClick={() => setStep("setup_duo")}
+                  className="group flex flex-col items-center justify-center p-6 border border-zinc-200 hover:border-zinc-400 rounded-2xl bg-zinc-50 hover:bg-white hover:shadow-lg transition-all text-center space-y-3 cursor-pointer"
+                >
+                  <span className="text-4xl">👥</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 group-hover:text-black">👥 Foto Berdua</h3>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">Sesi kolaboratif real-time via share link</p>
+                  </div>
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === "setup_solo" && (
+            <motion.div
+              key="setup_solo"
+              initial={{ x: 50, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -50, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-md space-y-6"
+            >
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setStep("choose_mode")}
+                  className="p-1.5 rounded-lg bg-zinc-50 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 transition-all border border-zinc-200 cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div>
+                  <h2 className="text-base font-bold text-zinc-900 leading-tight">Foto Sendiri</h2>
+                  <p className="text-[10px] text-zinc-400">Siapkan sesi pemotretan solo Anda</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="solo-name" className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase">
+                    Nama Anda
+                  </label>
                   <input
+                    id="solo-name"
                     type="text"
-                    value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                    placeholder="KODE RUANG"
-                    maxLength={6}
-                    disabled={isLoading || !name.trim()}
-                    className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-zinc-900 outline-none transition-all placeholder:text-zinc-400 text-center font-bold tracking-widest disabled:opacity-50 text-zinc-900"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Masukkan nama panggilan Anda..."
+                    maxLength={20}
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-zinc-900 outline-none transition-all font-medium text-zinc-900"
                   />
+                </div>
+
+                {error && (
+                  <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-rose-600 text-xs text-center font-medium animate-fade-in">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
                   <button
-                    type="submit"
-                    disabled={isLoading || !name.trim() || roomCode.length < 4}
-                    className="bg-zinc-100 border border-zinc-200 text-zinc-900 hover:bg-zinc-200 px-5 rounded-xl transition-all active:scale-[0.99] flex items-center justify-center disabled:opacity-40 disabled:pointer-events-none"
+                    onClick={() => setStep("choose_mode")}
+                    className="flex-1 py-3 px-4 border border-zinc-200 hover:bg-zinc-50 rounded-xl text-zinc-600 font-semibold text-sm transition-all cursor-pointer"
                   >
-                    <ArrowRight className="w-4 h-4" />
+                    Kembali
+                  </button>
+                  <button
+                    onClick={() => handleCreateRoom("solo")}
+                    disabled={isLoading || !name.trim()}
+                    className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold py-3 px-4 rounded-xl shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-1.5 text-sm disabled:opacity-40 cursor-pointer"
+                  >
+                    {isLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span>Mulai</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
                   </button>
                 </div>
-              </form>
-            </div>
-          </div>
-        </motion.div>
+              </div>
+            </motion.div>
+          )}
 
-        {/* Feature Highlights */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="flex items-center justify-center gap-6 text-zinc-400 text-xs font-medium"
-        >
-          <div className="flex items-center gap-1.5">
+          {step === "setup_duo" && (
+            <motion.div
+              key="setup_duo"
+              initial={{ x: 50, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -50, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-md space-y-6"
+            >
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setStep("choose_mode")}
+                  className="p-1.5 rounded-lg bg-zinc-50 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 transition-all border border-zinc-200 cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div>
+                  <h2 className="text-base font-bold text-zinc-900 leading-tight">Foto Berdua</h2>
+                  <p className="text-[10px] text-zinc-400">Buat lobi baru atau gabung lobi teman</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="duo-name" className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase">
+                    Nama Anda
+                  </label>
+                  <input
+                    id="duo-name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Masukkan nama panggilan Anda..."
+                    maxLength={20}
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-zinc-900 outline-none transition-all font-medium text-zinc-900"
+                  />
+                </div>
+
+                {error && (
+                  <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-rose-600 text-xs text-center font-medium animate-fade-in">
+                    {error}
+                  </div>
+                )}
+
+                <div className="space-y-3 pt-2">
+                  <button
+                    onClick={() => handleCreateRoom("online")}
+                    disabled={isLoading || !name.trim()}
+                    className="w-full bg-zinc-900 hover:bg-zinc-800 text-white font-semibold py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-40 cursor-pointer"
+                  >
+                    {isLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        Buat Lobby Baru
+                      </>
+                    )}
+                  </button>
+
+                  <div className="relative flex py-1 items-center">
+                    <div className="flex-grow border-t border-zinc-200"></div>
+                    <span className="flex-shrink mx-4 text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+                      Atau Gabung Lobby Teman
+                    </span>
+                    <div className="flex-grow border-t border-zinc-200"></div>
+                  </div>
+
+                  <form onSubmit={handleJoinRoom} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={roomCode}
+                      onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                      placeholder="KODE LOBBY"
+                      maxLength={6}
+                      disabled={isLoading || !name.trim()}
+                      className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-zinc-900 outline-none transition-all font-bold tracking-widest disabled:opacity-50 text-center text-zinc-900 placeholder:text-zinc-400"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isLoading || !name.trim() || roomCode.length < 4}
+                      className="bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-900 px-5 rounded-xl transition-all flex items-center justify-center disabled:opacity-40 cursor-pointer"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex items-center justify-center gap-6 text-zinc-400 text-xs font-medium">
+          <div className="flex items-center gap-1.5 animate-pulse">
             <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
             <span>Kamera Terbuka</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 animate-pulse">
             <ImageIcon className="w-3.5 h-3.5 text-zinc-400" />
             <span>Desain Photostrip</span>
           </div>
-        </motion.div>
+        </div>
       </div>
 
       <a href="/admin" className="absolute bottom-4 right-4 p-2 text-zinc-300 hover:text-zinc-600 transition-colors" title="Admin Panel">

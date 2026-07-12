@@ -21,5 +21,10 @@ service cloud.firestore {
     match /custom_frames/{frameId} {
       allow read, write: if true;
     }
+
+    // Custom Colors Collection
+    match /custom_colors/{colorId} {
+      allow read, write: if true;
+    }
   }
 }

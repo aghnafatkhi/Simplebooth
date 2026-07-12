@@ -231,7 +231,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
   const currentPhotoCount = isPeer1 ? (room?.photos1?.length || 0) : (room?.photos2?.length || 0);
   const activePose = allPoseChallenges[currentPhotoCount % allPoseChallenges.length];
 
-  // Load Custom Poses and Frames from Firestore
+  // Load Custom Poses, Frames, and Colors from Firestore
   useEffect(() => {
     // Listen to custom poses
     const unsubPoses = onSnapshot(collection(db, "custom_poses"), (snapshot) => {
@@ -263,15 +263,56 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
       setAllFrameStyles([...dbFrames, ...FRAME_STYLES]);
     });
 
+    // Listen to custom colors
+    const unsubColors = onSnapshot(collection(db, "custom_colors"), (snapshot) => {
+      const dbColors: any[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        dbColors.push({
+          id: doc.id,
+          name: data.name || "Warna Kustom",
+          value: data.value || data.hex || "#ffffff"
+        });
+      });
+      
+      const baseColors = [
+        { id: "color-white", name: "Putih", value: "#ffffff" },
+        { id: "color-black", name: "Hitam", value: "#000000" },
+        { id: "color-cream", name: "Cream", value: "#FFFDD0" },
+        { id: "color-beige", name: "Beige", value: "#F5F5DC" },
+        { id: "color-abumuda", name: "Abu Muda", value: "#E5E7EB" },
+        { id: "color-abutua", name: "Abu Tua", value: "#4B5563" },
+        { id: "color-sage", name: "Sage Green", value: "#8F9779" },
+        { id: "color-dusty", name: "Dusty Blue", value: "#8CA1B3" },
+        { id: "color-pink", name: "Soft Pink", value: "#EABFCB" },
+        { id: "color-mocha", name: "Mocha", value: "#7D5F4F" }
+      ];
+      setAllSolidColors([...baseColors, ...dbColors]);
+    });
+
     return () => {
       unsubPoses();
       unsubFrames();
+      unsubColors();
     };
   }, []);
 
   // Editor states
   const [editState, setEditState] = useState<EditState>(DEFAULT_EDIT_STATE);
   const [activeTab, setActiveTab] = useState<"frame" | "filter" | "stickers" | "text" | "download">("frame");
+  const [editWizardStep, setEditWizardStep] = useState<"frame" | "color" | "filter" | "preview">("frame");
+  const [allSolidColors, setAllSolidColors] = useState<any[]>([
+    { id: "color-white", name: "Putih", value: "#ffffff" },
+    { id: "color-black", name: "Hitam", value: "#000000" },
+    { id: "color-cream", name: "Cream", value: "#FFFDD0" },
+    { id: "color-beige", name: "Beige", value: "#F5F5DC" },
+    { id: "color-abumuda", name: "Abu Muda", value: "#E5E7EB" },
+    { id: "color-abutua", name: "Abu Tua", value: "#4B5563" },
+    { id: "color-sage", name: "Sage Green", value: "#8F9779" },
+    { id: "color-dusty", name: "Dusty Blue", value: "#8CA1B3" },
+    { id: "color-pink", name: "Soft Pink", value: "#EABFCB" },
+    { id: "color-mocha", name: "Mocha", value: "#7D5F4F" }
+  ]);
   const [selectedStickerCategory, setSelectedStickerCategory] = useState<string>("Cute 3D");
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [selectedElementType, setSelectedElementType] = useState<"sticker" | "text" | null>(null);
@@ -2894,7 +2935,8 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                                     playsInline
                                     className="w-full h-full object-cover select-none"
                                     style={{
-                                      filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`
+                                      filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`,
+                                      transform: "scaleX(-1)"
                                     }}
                                   />
                                 ) : p1 ? (
@@ -2922,7 +2964,8 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                                     playsInline
                                     className="w-full h-full object-cover select-none"
                                     style={{
-                                      filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`
+                                      filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`,
+                                      transform: "scaleX(-1)"
                                     }}
                                   />
                                 ) : p2 ? (
@@ -2951,7 +2994,8 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                                 playsInline
                                 className="w-full h-full object-cover select-none"
                                 style={{
-                                  filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`
+                                  filter: `${activeFilterCss} brightness(${editState.sliders.brightness}%) contrast(${editState.sliders.contrast}%) saturate(${editState.sliders.saturation}%) blur(${editState.sliders.blur}px)`,
+                                  transform: "scaleX(-1)"
                                 }}
                               />
                             ) : imgSrc ? (
@@ -3109,38 +3153,40 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
               )}
             </div>
 
-            {/* RIGHT SIDEBAR - DETAILED CONTROL PANELS */}
+            {/* RIGHT SIDEBAR - DETAILED STEP-BY-STEP CONTROL PANELS */}
             <div className="lg:col-span-6 flex flex-col bg-white border border-zinc-200 rounded-2xl p-5 md:p-6 shadow-xs relative overflow-hidden">
-              {/* Studio Tabs */}
-              <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200/80 p-1 rounded-xl overflow-x-auto scrollbar-none mb-6 w-full">
-                {[
-                  { id: "frame", name: "Frame", icon: Palette },
-                  { id: "filter", name: "Filter", icon: Sliders },
-                  { id: "stickers", name: "Stiker", icon: Smile },
-                  { id: "text", name: "Teks", icon: Type },
-                  { id: "download", name: "Cetak", icon: Download }
-                ].map((tab) => {
-                  const IconComp = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id as any)}
-                      className={`flex items-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                        activeTab === tab.id
-                          ? "bg-rose-500 text-white shadow-md shadow-rose-500/10"
-                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              
+              {/* Wizard Step Progress Tracker */}
+              <div className="flex items-center justify-between mb-6 border-b border-zinc-100 pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-zinc-900 text-white font-mono text-xs font-bold">
+                    {editWizardStep === "frame" ? "1" : editWizardStep === "color" ? "2" : editWizardStep === "filter" ? "3" : "4"}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 capitalize">
+                      Langkah: {editWizardStep === "frame" ? "Pilih Template Frame" : editWizardStep === "color" ? "Pilih Warna Solid" : editWizardStep === "filter" ? "Pilih Filter" : "Pratinjau & Cetak"}
+                    </h3>
+                    <p className="text-[10px] text-zinc-400">Pilih satu opsi lalu tekan lanjut</p>
+                  </div>
+                </div>
+                
+                {/* Horizontal progress dots */}
+                <div className="flex gap-1.5">
+                  {(["frame", "color", "filter", "preview"] as const).map((s) => (
+                    <div
+                      key={s}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        editWizardStep === s ? "w-6 bg-zinc-950" : "w-1.5 bg-zinc-200"
                       }`}
-                    >
-                      <IconComp className="w-3.5 h-3.5" />
-                      <span>{tab.name}</span>
-                    </button>
-                  );
-                })}
+                    />
+                  ))}
+                </div>
               </div>
 
-              {/* TAB CONTENT: FRAME & LAYOUT & BG */}
-              {activeTab === "frame" && (
-                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
+              {/* STEP 1: FRAME & LAYOUT SELECTION */}
+              {editWizardStep === "frame" && (
+                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1 animate-fade-in">
+                  
                   {/* Custom Frame Image Upload */}
                   <div className="space-y-3 bg-rose-50/50 p-4 rounded-xl border border-rose-100/60">
                     <div className="flex items-center justify-between">
@@ -3194,7 +3240,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                         <div className="text-center py-2">
                           <Upload className="w-5 h-5 text-zinc-400 mx-auto mb-2" />
                           <p className="text-[10px] font-bold text-zinc-700">Klik / Seret Gambar Frame Anda</p>
-                          <p className="text-[9px] text-zinc-400 mt-1">Ugah file PNG transparan untuk frame estetik kustom.</p>
+                          <p className="text-[9px] text-zinc-400 mt-1">Unggah file PNG transparan untuk frame estetik kustom.</p>
                         </div>
                       )}
                     </div>
@@ -3216,7 +3262,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                             setEditState(nextState);
                             syncEditStateToFirebase(nextState);
                           }}
-                          className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all ${
+                          className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                             editState.frame === style.id
                               ? "bg-zinc-900 border-zinc-900 text-white shadow-xs"
                               : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100"
@@ -3226,45 +3272,6 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                             <h4 className="text-xs font-bold leading-none">{style.name}</h4>
                             <p className="text-[9px] text-zinc-400 mt-1.5 leading-relaxed">{style.desc}</p>
                           </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Background Preset select */}
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Warna & Tekstur Latar</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {BACKGROUND_PRESETS.map((bp) => (
-                        <button
-                          key={bp.id}
-                          onClick={() => {
-                            const nextState = {
-                              ...editState,
-                              backgroundType: bp.type,
-                              backgroundColor: bp.type === "warna-polos" ? bp.value : editState.backgroundColor,
-                              backgroundGradient: bp.type === "gradient-lembut" ? bp.value : editState.backgroundGradient
-                            };
-                            setEditState(nextState);
-                            syncEditStateToFirebase(nextState);
-                          }}
-                          className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
-                            (bp.type === "warna-polos" && editState.backgroundColor === bp.value) ||
-                            (bp.type === "gradient-lembut" && editState.backgroundGradient === bp.value) ||
-                            (bp.type === editState.backgroundType && bp.type !== "warna-polos" && bp.type !== "gradient-lembut")
-                              ? "bg-zinc-900 border-zinc-900 text-white shadow-xs"
-                              : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100"
-                          }`}
-                        >
-                          {/* visual color sphere */}
-                          <div
-                            className="w-5 h-5 rounded-full border border-zinc-200"
-                            style={{
-                              backgroundColor: bp.type === "warna-polos" ? bp.value : undefined,
-                              background: bp.type === "gradient-lembut" ? bp.value : undefined
-                            }}
-                          />
-                          <span className="text-[9px] font-bold tracking-tight text-center truncate w-full">{bp.name}</span>
                         </button>
                       ))}
                     </div>
@@ -3316,13 +3323,78 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                 </div>
               )}
 
-              {/* TAB CONTENT: LIGHTROOM TUNE & FILTERS */}
-              {activeTab === "filter" && (
-                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
+              {/* STEP 2: SOLID COLORS SELECTION */}
+              {editWizardStep === "color" && (
+                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1 animate-fade-in">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Pilihan Warna Solid Latar</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {allSolidColors.map((scSc) => (
+                        <button
+                          key={scSc.id}
+                          onClick={() => {
+                            const nextState = {
+                              ...editState,
+                              backgroundType: "warna-polos",
+                              backgroundColor: scSc.value
+                            };
+                            setEditState(nextState);
+                            syncEditStateToFirebase(nextState);
+                          }}
+                          className={`p-3.5 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all cursor-pointer ${
+                            editState.backgroundType === "warna-polos" && editState.backgroundColor.toLowerCase() === scSc.value.toLowerCase()
+                              ? "bg-zinc-900 border-zinc-900 text-white shadow-md scale-[1.02]"
+                              : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100"
+                          }`}
+                        >
+                          <div
+                            className="w-8 h-8 rounded-full border border-zinc-300 shadow-xs"
+                            style={{ backgroundColor: scSc.value }}
+                          />
+                          <div className="text-center">
+                            <span className="text-[11px] font-bold block truncate w-24">{scSc.name}</span>
+                            <span className="text-[8px] font-mono text-zinc-400 block mt-0.5">{scSc.value.toUpperCase()}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Manual color picker */}
+                  <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-200/80 space-y-3">
+                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Gunakan Warna Kustom Bebas</label>
+                    <div className="flex items-center gap-3 bg-white border border-zinc-200 rounded-xl p-3">
+                      <input
+                        type="color"
+                        value={editState.backgroundColor}
+                        onChange={(e) => {
+                          const nextState = {
+                            ...editState,
+                            backgroundType: "warna-polos",
+                            backgroundColor: e.target.value
+                          };
+                          setEditState(nextState);
+                          syncEditStateToFirebase(nextState);
+                        }}
+                        className="w-10 h-10 bg-transparent border-0 cursor-pointer rounded-lg overflow-hidden"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-zinc-800">Klik palet warna kustom</p>
+                        <p className="text-[10px] text-zinc-400 font-mono mt-0.5">HEX: {editState.backgroundColor.toUpperCase()}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: PHOTO FILTERS SELECTION */}
+              {editWizardStep === "filter" && (
+                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1 animate-fade-in">
+                  
                   {/* Presets Grid */}
                   <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Pilihan Filter</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Sentuhan Tone Filter Estetik</label>
+                    <div className="grid grid-cols-3 gap-2.5">
                       {FILTER_PRESETS.map((f) => (
                         <button
                           key={f.id}
@@ -3331,7 +3403,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                             setEditState(nextState);
                             syncEditStateToFirebase(nextState);
                           }}
-                          className={`p-3.5 rounded-xl border text-center transition-all flex items-center justify-center ${
+                          className={`p-3.5 rounded-xl border text-center transition-all flex items-center justify-center cursor-pointer ${
                             editState.filter === f.id
                               ? "bg-zinc-900 border-zinc-900 text-white shadow-xs"
                               : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100"
@@ -3429,151 +3501,9 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                 </div>
               )}
 
-              {/* TAB CONTENT: STICKERS PANEL */}
-              {activeTab === "stickers" && (
-                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
-                  {/* Category Buttons */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-2">
-                    {Object.keys(STICKER_LIST).map((cat) => (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedStickerCategory(cat)}
-                        className={`py-1.5 px-3 rounded-full text-[10px] font-bold tracking-widest uppercase transition-all ${
-                          selectedStickerCategory === cat
-                            ? "bg-zinc-900 text-white shadow-xs"
-                            : "bg-zinc-100 text-zinc-500 hover:text-zinc-800"
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Sticker List Grid */}
-                  <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-200">
-                    <div className="grid grid-cols-6 gap-3 max-h-[240px] overflow-y-auto scrollbar-none">
-                      {STICKER_LIST[selectedStickerCategory].map((stk, idx) => {
-                        const isImg = stk.startsWith("http") || stk.startsWith("/") || stk.includes(".");
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => handleAddSticker(stk)}
-                            className="p-2 rounded-xl bg-white hover:bg-zinc-100 border border-zinc-200 text-3xl transition-all flex items-center justify-center active:scale-95 shadow-xs aspect-square"
-                          >
-                            {isImg ? (
-                              <img src={stk} className="w-8 h-8 object-contain" alt="Sticker" />
-                            ) : (
-                              stk
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <p className="text-[10px] text-zinc-400 italic text-center leading-relaxed">Klik pada stiker di daftar untuk memasukkannya ke template. Geser, cubit, atau rotasikan stiker langsung di frame pratinjau.</p>
-                </div>
-              )}
-
-              {/* TAB CONTENT: TEXTS & FONTS */}
-              {activeTab === "text" && (
-                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
-                  {/* Create text form */}
-                  <form onSubmit={handleAddText} className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase">Masukkan Teks Baru</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newTextVal}
-                          onChange={(e) => setNewTextVal(e.target.value)}
-                          placeholder="Ketik tulisan Anda di sini..."
-                          className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl py-3 px-4 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-zinc-500"
-                        />
-                        <button
-                          type="submit"
-                          className="p-3 bg-zinc-900 text-white rounded-xl hover:bg-zinc-850 text-xs font-semibold transition-all flex items-center gap-1.5"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Tambah
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block mb-1.5">Pilihan Font</label>
-                        <select
-                          onChange={(e) => updateSelectedElement("font", e.target.value)}
-                          className="w-full bg-zinc-50 border border-zinc-200 rounded-lg py-2 px-3 text-xs text-zinc-800 focus:outline-none focus:border-zinc-500"
-                        >
-                          {FONT_OPTIONS.map(f => (
-                            <option key={f.id} value={f.id}>{f.name}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block mb-1.5">Warna Tulisan</label>
-                        <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-1">
-                          <input
-                            type="color"
-                            value={editState.texts.find(t => t.id === selectedElementId)?.color || "#000000"}
-                            onChange={(e) => updateSelectedElement("color", e.target.value)}
-                            className="w-7 h-7 bg-transparent border-0 cursor-pointer rounded-md overflow-hidden"
-                          />
-                          <span className="text-[10px] text-zinc-500 uppercase font-mono font-bold">PILIH</span>
-                        </div>
-                      </div>
-                    </div>
-                  </form>
-
-                  {/* Active List of Texts */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Teks yang Ada di Frame</label>
-                    <div className="grid grid-cols-1 gap-2 max-h-[140px] overflow-y-auto scrollbar-none">
-                      {editState.texts.map((t) => (
-                        <div
-                          key={t.id}
-                          onClick={() => {
-                            setSelectedElementId(t.id);
-                            setSelectedElementType("text");
-                          }}
-                          className={`p-3 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
-                            selectedElementId === t.id
-                              ? "bg-zinc-900 border-zinc-900 text-white"
-                              : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100"
-                          }`}
-                        >
-                          <div>
-                            <span className="text-xs font-semibold block truncate max-w-xs">&ldquo;{t.text}&rdquo;</span>
-                            <span className={`text-[8px] uppercase tracking-widest block mt-1.5 ${selectedElementId === t.id ? "text-zinc-300" : "text-zinc-400"}`}>Tipe: {t.type}</span>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const nextState = {
-                                ...editState,
-                                texts: editState.texts.filter(item => item.id !== t.id)
-                              };
-                              setEditState(nextState);
-                              setSelectedElementId(null);
-                              syncEditStateToFirebase(nextState);
-                            }}
-                            className={`p-1.5 rounded-lg border transition-all ${selectedElementId === t.id ? "bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-rose-500 hover:text-white hover:border-transparent" : "bg-zinc-100 hover:bg-rose-50 hover:text-rose-600 border-zinc-200 hover:border-rose-200"}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB CONTENT: ADVANCED PRINT & FILE EXPORT OPTIONS */}
-              {activeTab === "download" && (
-                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1">
+              {/* STEP 4: PREVIEW & FINAL SAVE/PRINT EXPORTS */}
+              {editWizardStep === "preview" && (
+                <div className="space-y-6 flex-1 overflow-y-auto scrollbar-none pr-1 animate-fade-in">
                   <div className="space-y-3">
                     <label className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase block">Simpan & Ekspor Hasil Karya</label>
                     
@@ -3595,16 +3525,16 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                       <button
                         onClick={() => triggerPrintingFlow("png-2k")}
                         disabled={isPrinting || isGifGenerating || isVideoGenerating}
-                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50"
+                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50 cursor-pointer"
                       >
                         <div>
                           <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">
-                            Download Gambar (2R - Solo)
+                            Download Gambar (2R)
                           </h4>
                           <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Simpan hasil foto strip tunggal dalam resolusi tinggi format PNG.</p>
                         </div>
                         <span className="text-[9px] bg-zinc-900 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider text-white font-mono shadow-xs">
-                          PNG 2K
+                          PNG 2R
                         </span>
                       </button>
 
@@ -3612,7 +3542,7 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                       <button
                         onClick={() => triggerPrintingFlow("printable-4r")}
                         disabled={isPrinting || isGifGenerating || isVideoGenerating}
-                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50"
+                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50 cursor-pointer"
                       >
                         <div>
                           <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">
@@ -3629,11 +3559,11 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                       <button
                         onClick={compileAndSaveGif}
                         disabled={isPrinting || isGifGenerating || isVideoGenerating}
-                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50"
+                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50 cursor-pointer"
                       >
                         <div>
                           <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">
-                            GIF Gambar
+                            GIF Gambar Animasi
                           </h4>
                           <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Simpan animasi stop-motion berulang dari seluruh pose foto Anda.</p>
                         </div>
@@ -3646,13 +3576,13 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                       <button
                         onClick={compileAndSaveVideo}
                         disabled={isPrinting || isGifGenerating || isVideoGenerating}
-                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50"
+                        className="p-4 rounded-xl border border-zinc-200 hover:border-zinc-900 bg-zinc-50 hover:bg-zinc-100 text-left transition-all flex justify-between items-center group disabled:opacity-50 cursor-pointer"
                       >
                         <div>
                           <h4 className="text-xs font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors uppercase">
-                            Live Photo
+                            Live Photo MP4
                           </h4>
-                          <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Simpan video stop-motion estetik dengan efek transisi ala iPhone.</p>
+                          <p className="text-[10px] text-zinc-400 mt-1.5 leading-relaxed">Simpan rekaman video live photo murni stop-motion estetik seperti yang muncul saat kursor diarahkan ke foto.</p>
                         </div>
                         <span className="text-[9px] bg-rose-100 px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider text-rose-600 font-mono shadow-xs">
                           MP4
@@ -3665,14 +3595,42 @@ export default function Room({ params }: { params: Promise<{ id: string }> }) {
                   <div className="pt-3 border-t border-zinc-200 flex gap-3">
                     <button
                       onClick={startPhotobooth}
-                      className="flex-1 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-750 font-bold py-3.5 px-6 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                      className="flex-1 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-750 font-bold py-3.5 px-6 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
                     >
                       <RefreshCw className="w-4 h-4" />
-                      Foto Ulang Bersama
+                      Mulai Sesi Baru (Reset)
                     </button>
                   </div>
                 </div>
               )}
+
+              {/* STRICT COMPREHENSIVE STEPS FOOTER CONTROLLER */}
+              <div className="mt-6 pt-4 border-t border-zinc-100 flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    if (editWizardStep === "preview") setEditWizardStep("filter");
+                    else if (editWizardStep === "filter") setEditWizardStep("color");
+                    else if (editWizardStep === "color") setEditWizardStep("frame");
+                  }}
+                  disabled={editWizardStep === "frame"}
+                  className="px-5 py-3 border border-zinc-200 hover:bg-zinc-50 rounded-xl text-zinc-600 text-xs font-bold tracking-tight disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                >
+                  Kembali
+                </button>
+                
+                <button
+                  onClick={() => {
+                    if (editWizardStep === "frame") setEditWizardStep("color");
+                    else if (editWizardStep === "color") setEditWizardStep("filter");
+                    else if (editWizardStep === "filter") setEditWizardStep("preview");
+                  }}
+                  disabled={editWizardStep === "preview"}
+                  className="px-5 py-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold tracking-tight disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                >
+                  Lanjut
+                </button>
+              </div>
+
             </div>
           </>
         )}
